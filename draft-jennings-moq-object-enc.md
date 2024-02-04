@@ -1,0 +1,562 @@
+---
+title: SecureObject - An E2E Object Protection Scheme for MOQ
+abbrev: SecureObject
+docname: draft-jennings-moq-object-enc-latest
+category: std
+
+ipr: trust200902
+stream: IETF
+area: "Applications and Real-Time"
+keyword: Internet-Draft
+v: 3
+venue:
+  group: "Media over QUIC"
+  type: "Working Group"
+  mail: "moq@ietf.org"
+  arch: "https://mailarchive.ietf.org/arch/browse/moq/"
+  github: "moq-wg/moqtransport"
+  latest: "https://sframe-wg.github.io/sframe/draft-ietf-sframe-enc.html"
+
+author:
+ -
+    ins: C. Jennings
+    name: Cullen Jennings
+    organization: Cisco
+    email: fluffy@cisco.com
+ -
+    ins: S. Nandakumar
+    name: Suhas Nandakumar
+    organization: Cisco
+    email: snandaku@cisco.com
+
+
+normative:
+
+informative:
+
+
+--- abstract
+
+This document describes end-to-end encryption and authentication
+mechanism for application objects intended to be delivered
+over Media over QUIC Transport (MOQT).
+
+--- middle
+
+
+# Introduction
+
+Media Over QUIC Transport (MOQT) is a protocol that is optimized for the QUIC protocol, either directly or via WebTransport, for the dissemination of media. MOQT defines a publish/subscribe media delivery layer across set of participating relays for supporting wide range of use-cases with different resiliency and latency (live, interactive) needs without compromising the scalability and cost effectiveness associated with content delivery networks.
+
+Typically a MOQ Relay doesn't need to access the media content, thus allowing
+for the media to be "end-to-end" encrypted so that it cannot be decrypted by the relays. However for the relays to participate effectively in the media delivery,
+it needs to able to access metadata of a MOQT object to carryout the
+required store and forward functions.
+
+As such, two layers of encryption and authentication are required:
+
+- Hop-by-hop (HBH) encryption achieved through QUIC connection per hop and
+- End-to-end (E2E) encryption (E2EE) of media between the endpoints.
+
+This document proposes a E2EE protection scheme known as moq-enc, an object level
+protection scheme designed to work in settigns where MOQT based media delivery is anticipated.
+
+# Terminology
+
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+"SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and
+"OPTIONAL" in this document are to be interpreted as described in
+BCP 14 {{!RFC2119}} {{!RFC8174}} when, and only when, they appear in all
+capitals, as shown here.
+
+IV:
+: Initialization Vector
+
+MAC:
+: Message Authentication Code
+
+E2EE:
+: End to End Encryption
+
+HBH:
+: Hop By Hop
+
+Producer:
+: Fill in
+
+Consumer:
+: Fill in
+
+# MOQT Object Model Recap
+
+MOQT defines a publish/subscribe based media delivery protocol, where in
+endpoints, called producers, publish objects which are delivered via
+participating relays to receiving endpoints, called consumers.
+
+Section 2 of MoQTransport defines hierarchical object model for
+application data, comprised of objects, groups and tracks.
+
+Objects defines the basic data element, an addressable unit whose payload
+is sequence of bytes. All objects belong to a group, indicating ordering
+and potential dependencies. A track contains a sequence of groups and
+serves as the entity against which a consumer issues a subscription request.
+
+~~~~~
+  Media Over QUIC Application
+
+
+          |                                                       time
+          |
+ TrackA   +-+---------+-----+---------+--------------+---------+---->
+          | | Group1  |     | Group2  |  . . . . . . | GroupN  |
+          | +----+----+     +----+----+              +---------+
+          |      |               |
+          |      |               |
+          | +----+----+     +----+----+
+          | | Object0 |     | Object0 |
+          | +---------+     +---------+
+          | | Object1 |     | Object1 |
+          | +---------+     +---------+
+          | | Object2 |     | Object2 |
+          | +---------+     +---------+
+          |      .
+          |      .
+          |      .
+          | +---------+
+          | | ObjectN |
+          | +---------+
+          |
+          |
+          |
+          |                                                       time
+          |
+ TrackB   +-+---------+-----+---------+--------------+---------+---->
+          | | Group1  |     | Group2  | . . .. .. .. | GroupN  |
+          | +---+-----+     +----+----+              +----+----+
+          |     |                |                        |
+          |     |                |                        |
+          |+----+----+      +----+----+              +----+----+
+          || Object0 |      | Object0 |              | Object0 |
+          |+---------+      +---------+              +---------+
+          |
+          v
+
+
+~~~~~
+
+Objects are comprised of two parts: metadata and a payload. The metadata is
+never end to end encrypted and is always visible to relays. The payload
+portion may be end to end encrypted, in which case it is only visible to the
+producer and consumer. The application is solely responsible for the content
+of the object payload.
+
+Tracks are identified by a combination of its `TrackNamespace ` and `TrackName`.
+Group and Objects are represented as varibale length integers called GroupId and
+ObjectId respectively. GroupId and ObjectId increase monotonically for tracks
+that are actively publishing media.
+
+For purposes of this specification, we define `FullTrackName` as :
+
+~~~
+FullTrackName = TrackNamespace + TrackName
+~~~
+
+and  "MOQT Object Name" or "Object Name" is combination of following properties:
+
+~~~
+MOQTObjectName = (FullTrackName, GroupId, ObjectId)
+~~~
+
+## Requirements
+
+Applications using MOQT for their media delivery MUST ensure the following
+requirements are enforced to meet the security assurances from the
+protection mechanisms defined in this specification:
+
+- A given `FullTrackName` MUST uniquely identify a single producer within a MOQT Session.
+
+- `GroupId` MUST NOT be duplicated within a Track.
+
+- `ObjectId` MUST NOT be duplicated within a group.
+
+
+# MoQ Object Encryption
+
+This document defines an encryption mechanism, called SecObj, that provides effective E2EE protection with a minimal encryption bandwidth overhead. This section describes how the mechanism works, including details of how applications utilize SecObj for object protection, as well as the actual mechanics of E2EE for protecting the objects.
+
+## Ciphertext
+
+An SecObj ciphertext comprises an header, followed by output of an AEAD encryption of the plaintext {{!RFC5116}} corresponding to the MOQT Object.
+
+SecObj header consists of a variable length encoded integer called KID. The KID along with GroupId and ObjectId fields from the MOQT object metadata is provided as additional authenticated data (AAD). The KID is encoded as a QUIC varint.
+
+~~~~~
+   +-----------+--------------------+---------------------+<-+
+   |                      Key ID                          |   |
++->+-----------+--------------------+---------------------+   |
+|  |                                                       |  |
+|  |                                                       |  |
+|  |                                                       |  |
+|  |                                                       |  |
+|  |                   Encrypted Data                      |  |
+|  |                                                       |  |
+|  |                                                       |  |
+|  |                                                       |  |
+|  |                                                       |  |
++->+-------------------------------------------------------+<-+
+|  |                 Authentication Tag                    |  |
+|  +-------------------------------------------------------+  |
+|                                                             |
+|                                                             |
++--- Encrypted Portion               Authenticated Portion ---+
+~~~~~
+
+
+## Encryption Schema
+
+SecObj encryption uses an AEAD encryption algorithm and hash function defined by the cipher suite in use (see cipher-suites).
+
+We will refer to the following aspects of the AEAD algorithm below:
+
+AEAD.Encrypt and AEAD.Decrypt - The encryption and decryption functions for the AEAD.
+
+AEAD.Nk - The size in bytes of a key for the encryption algorithm
+
+AEAD.Nn - The size in bytes of a nonce for the encryption algorithm
+
+AEAD.Nt - The overhead in bytes of the encryption algorithm (typically the size of a "tag" that is added to the plaintext)
+
+
+## Keys, Salts, and Nonces
+
+When encrypting objects within a MOQT Track, there is one secret `base_key`
+per `FullTrackName` on which is premised the encryption or decryption operations
+for the objects within that track.
+
+The `base_key` is labeled with an integer KID value signaled in the SecObj header. The producers and consumers need to agree on which key should be used for a given KID and the purpose of the key, encryption or decryption only. The process for provisioning keys and their KID values is beyond the scope of this specification, but its security properties will bound the assurances that SecObj provides.
+
+When encrypting a MOQT object, the application specifies which `KID` and provides the `Nonce` to be used. The `Nonce`` is obtained from the composition of bits from the object's GroupId and the ObjectId fields in that order.
+
+When decrypting, the `base_key` for decryption is selected from the available keys using the KID value in the SecObj Header and Nonce value is derived from the incoming MOQT object header as mentioned above.
+
+A given key MUST NOT be used for encryption by multiple senders.  Such reuse
+would result in multiple encrypted objects being generated with the same (key,
+nonce) pair, which harms the protections provided by many AEAD algorithms.
+Implementations SHOULD mark each key as usable for encryption or decryption,
+never both.
+
+### Key Derivation
+
+Secobj encryption and decryption  use a key and salt derived from the `base_key`
+associated to a KID.  Given a `base_key` value for a `FullTrackName` the key
+and salt are derived using HKDF {{!RFC5869}} as follows:
+
+~~~~~
+def derive_key_salt(KID, base_key):
+  secobj_label = "SecObj 1.0 "
+  secobj_secret = HKDF-Extract(secobj_label, base_key)
+
+  secobj_key_label = "SecObj 1.0 Secret key " + KID + cipher_suite
+  secobj_key = HKDF-Expand(secobj_secret, secobj_key_label, AEAD.Nk)
+
+  secobj_salt_label = "SecObj 1.0 Secret salt " + KID + cipher_suite
+  secobj_salt = HKDF-Expand(secobj_secret, secobj_salt_label, AEAD.Nn)
+
+  return secobj_key, secobj_salt
+~~~~~
+
+In the derivation of `secobj_secret`:
+
+* The `+` operator represents concatenation of byte strings.
+
+* The `cipher_suite` value is a 2-byte big-endian integer representing the
+  cipher suite in use (see cipher-suites).
+
+The hash function used for HKDF is determined by the cipher suite in use.
+
+### Encryption
+
+The key for encrypting MOQT objects from a given track is the `secobj_key`
+derived from the `base_key` corresponding to the track and the nonce is formed
+by XORing the `secobj_salt` with the application provided nonce value, encoded as a big-endian integer of length `AEAD.Nn`.
+
+The encryptor forms an SecObj header using the KID value provided.
+The encoded header along with Nonce formed from  GroupId and ObjectId fields
+of the MOQT Object header is provided as AAD to the AEAD encryption operation,
+together with optional application-provided metadata which requires end to end authentication about the encrypted media (see {{metadata}}).
+
+The plaintext corresponds to the payload field of the MOQT Object.
+
+~~~~~
+def encrypt(Nonce, KID, metadata, plaintext):
+  secobj_key, secobj_salt = key_store[KID]
+
+  Nonce = encode_big_endian(Nonce, AEAD.Nn)
+  nonce = xor(secobj_salt, Nonce)
+
+  header = encode_header(KID)
+
+  ciphertext = AEAD.Encrypt(secobj_key, nonce, aad, plaintext)
+  return header + ciphertext
+~~~~~
+
+
+~~~~~
+
+                                  +----------------+
+                                  |                |
+        +-------------------------|      MOQ       |
+        |                  +------|     Object     |
+        |                  |      |                |
+        |                  |      +--------+-------+
+        |                  |               |
+        |                  |               |
+        |                  |               |
+        |                  |               |
+        |                  | Full          |
++----------------+         |Track          |
+|    GroupId     |         | Name          |
++----------------+         |               |
+|  Object ID     |         |               |
++----------------+         |               |
+        |                  |               |
+        |             +------------+       |
+        |<------------|    KID     |       |
+        |              ------------+       |
+        |  secobj_salt      |              |
+        |                   |              |
+        |                   |              |
+        v                   | secobj_key   |
+  +-----------+             |              |
+  |  NONCE    |             |              |
+  +-----------+             |              |
+        |                   |              |
+        |                   v              |
+        |           +--------------+       |
+        |           |              |       |
+        +---------->| AEAD.Encrypt |<------+
+                    |              |
+                    +-------+------+
+                            |
+                            |
+                            |
+                            v
+                    +--------------+
+                    |    KID       |
+                    +--------------+
+                    |              |
+                    | CipherText   |
+                    |              |
+                    +--------------+
+
+                    SecObj CipherText
+
+
+~~~~~
+{: title="Encrypting a MOQT Object Ciphertext" }
+
+### Decryption
+
+Before decrypting, a receiver needs to assemble a full SFrame ciphertext. When
+an SFrame ciphertext may be fragmented into multiple parts for transport (e.g.,
+a whole encrypted frame sent in multiple SRTP packets), the receiving client
+collects all the fragments of the ciphertext, using an appropriate sequencing
+and start/end markers in the transport. Once all of the required fragments are
+available, the client reassembles them into the SFrame ciphertext, then passes
+the ciphertext to SFrame for decryption.
+
+The KID field in the SFrame header is used to find the right key and salt for
+the encrypted frame, and the CTR field is used to construct the nonce. The SFrame
+decryption procedure is as follows:
+
+~~~~~
+def decrypt(metadata, sframe_ciphertext):
+  KID, CTR, header, ciphertext = parse_ciphertext(sframe_ciphertext)
+
+  sframe_key, sframe_salt = key_store[KID]
+
+  ctr = encode_big_endian(CTR, AEAD.Nn)
+  nonce = xor(sframe_salt, ctr)
+  aad = header + metadata
+
+  return AEAD.Decrypt(sframe_key, nonce, aad, ciphertext)
+~~~~~
+
+If a ciphertext fails to decrypt because there is no key available for the KID
+in the SFrame header, the client MAY buffer the ciphertext and retry decryption
+once a key with that KID is received.  If a ciphertext fails to decrypt for any
+other reason, the client MUST discard the ciphertext. Invalid ciphertexts SHOULD be
+discarded in a way that is indistinguishable (to an external observer) from having
+processed a valid ciphertext.
+
+~~~~~
+
+
+                                    SecObj CipherText
+
+                                   +--------------+
+                                   |    KID       |
+                                   +--------------+
+                                   |              |
+        +------------------------- | CipherText   |
+        |                  +------ |              |
+        |                  |       +--------------+
+        |                  |               |
+        |                  |               |
+        |                  |               |
+        |                  |               |
+        |                  |               |
+        v                  |               |
++----------------+         | KID           |
+|    GroupId     |         |               |
++----------------+         |               |
+|  Object ID     |         |               |
++----------------+         |               |
+        |                  v               |
+        |             +------------+       |
+        |<------------|    KID     |       |
+        |              ------------+       |
+        |  secobj_salt      |              |
+        |                   |              |
+        |                   |              |
+        v                   | secobj_key   |
+  +-----------+             |              |
+  |  NONCE    |             |              |
+  +-----------+             |              |
+        |                   |              |
+        |                   v              |
+        |           +--------------+       |
+        |           |              |       |
+        +---------->| AEAD.Decrypt |<------+
+                    |              |
+                    +-------+------+
+                            |
+                            |
+                            |
+                            v
+                    +----------------+
+                    |                |
+                    |      MOQ       |
+                    |     Object     |
+                    |                |
+                    +----------------+
+
+~~~~~
+{: title="Decrypting an MOQT Object Ciphertext" }
+
+The key associated to a give is not used directly as an AEAD key, but
+instead is used to derive a key and salt.  The derived key is used as the AEAD key, and the salt is used to derive nonces that is unique across cryptographic operations.
+
+```
+secret = HKDF_Extract(base_key, "moq" + full_track_name)
+key = HKDF_Expand(secret, "key", AEAD.Nk)
+salt = HKDF_Expand(secret, "salt", AEAD.Nn)
+```
+
+The nonce for encrypting an MoQ object for a given FullTrackName  is computed by XORing the salt with `ctr`, represented as a big-endian integer of `AEAD.Nn` bytes:
+
+```
+nonce = salt ^ ctr
+```
+
+If the value of `CTR` is greater than or equal to `1 << AEAD.Nn`, then
+the object cannot be encrypted and an error must be returned.
+
+Deriving a key and salt for each FullTrackName ensures that even if two tracks
+use the same base key, they will have distinct AEAD keys, and thus independent
+nonce spaces.
+
+
+# Security Considerations
+
+
+# IANA Considerations
+
+## SecObj Cipher Suites
+
+This registry lists identifiers for SecObj cipher suites, as defined in cipher-suites.  The cipher suite field is two bytes wide, so the valid cipher suites are in the range 0x0000 to 0xFFFF.
+
+Template:
+
+* Value: The numeric value of the cipher suite
+
+* Name: The name of the cipher suite
+
+* Reference: The document where this wire format is defined
+
+Initial contents:
+
+
+| Value  | Name                          | Reference |
+|:-------|:------------------------------|:----------|
+| 0x0001 | `AES_128_CTR_HMAC_SHA256_80`  | RFC XXXX  |
+| 0x0002 | `AES_128_CTR_HMAC_SHA256_64`  | RFC XXXX  |
+| 0x0003 | `AES_128_CTR_HMAC_SHA256_32`  | RFC XXXX  |
+| 0x0004 | `AES_128_GCM_SHA256_128`      | RFC XXXX  |
+| 0x0005 | `AES_256_GCM_SHA512_128`      | RFC XXXX  |
+{: #iana-cipher-suites title="SecObj cipher suites" }
+
+# Application Responsibilities
+
+To use SFrame, an application needs to define the inputs to the SFrame
+encryption and decryption operations, and how SFrame ciphertexts are delivered
+from sender to receiver (including any fragmentation and reassembly).  In this
+section, we lay out additional requirements that an integration must meet in
+order for SFrame to operate securely.
+
+## Header Value Uniqueness
+
+Applications MUST ensure that each (KID, CTR) combination is used for exactly
+one encryption operation. Typically this is done by assigning each sender a KID
+or set of KIDs, then having each sender use the CTR field as a monotonic counter,
+incrementing for each plaintext that is encrypted. Note that in addition to its
+simplicity, this scheme minimizes overhead by keeping CTR values as small as
+possible.
+
+## Key Management Framework
+
+It is up to the application to provision SFrame with a mapping of KID values to
+`base_key` values and the resulting keys and salts.  More importantly, the
+application specifies which KID values are used for which purposes (e.g., by
+which senders).  An applications KID assignment strategy MUST be structured to
+assure the non-reuse properties discussed above.
+
+It is also up to the application to define a rotation schedule for keys.  For
+example, one application might have an ephemeral group for every call and keep
+rotating keys when end points join or leave the call, while another application
+could have a persistent group that can be used for multiple calls and simply
+derives ephemeral symmetric keys for a specific call.
+
+It should be noted that KID values are not encrypted by SFrame, and are thus
+visible to any application-layer intermediaries that might handle an SFrame
+ciphertext.  If there are application semantics included in KID values, then
+this information would be exposed to intermediaries.  For example, in the scheme
+of sender-keys, the number of ratchet steps per sender is exposed, and in
+the scheme of mls, the number of epochs and the MLS sender ID of the SFrame
+sender are exposed.
+
+## Anti-Replay
+
+It is the responsibility of the application to handle anti-replay. Replay by network
+attackers is assumed to be prevented by network-layer facilities (e.g., TLS, SRTP).
+Senders MUST reject requests to encrypt multiple times
+with the same key and nonce.
+
+It is not mandatory to implement anti-replay on the receiver side. Receivers MAY
+apply time or counter based anti-replay mitigations.
+
+## Metadata
+
+The `metadata` input to SFrame operations is pure application-specified data. As
+such, it is up to the application to define what information should go in the
+`metadata` input and ensure that it is provided to the encryption and decryption
+functions at the appropriate points.  A receiver SHOULD NOT use SFrame-authenticated
+metadata until after the SFrame decrypt function has authenticated it.
+
+Note: The `metadata` input is a feature at risk, and needs more confirmation that it
+is useful and/or needed.
+
+--- back
+
+# Acknowledgements
+
