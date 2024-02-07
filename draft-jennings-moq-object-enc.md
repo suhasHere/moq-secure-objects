@@ -180,41 +180,14 @@ protection mechanisms defined in this specification:
 - `ObjectId` MUST NOT be duplicated within a group.
 
 
-# MoQ Object Encryption
+# Secure Object
 
-This document defines an encryption mechanism, called SecObj, that provides effective E2EE protection with a minimal encryption bandwidth overhead. This section describes how the mechanism works, including details of how applications utilize SecObj for object protection, as well as the actual mechanics of E2EE for protecting the objects.
+This document defines an encryption mechanism, called SecureObject(SecObj),
+that provides effective E2EE protection with a minimal encryption bandwidth
+overhead.
 
-## Ciphertext
-
-An SecObj ciphertext comprises an header, followed by output of an AEAD encryption of the plaintext {{!RFC5116}} corresponding to the MOQT Object.
-
-SecObj header consists of a variable length encoded integer called KID. The KID along with GroupId and ObjectId fields from the MOQT object metadata is provided as additional authenticated data (AAD). The KID is encoded as a QUIC varint.
-
-~~~~~
-   +-----------+--------------------+---------------------+<-+
-   |                      Key ID                          |   |
-+->+-----------+--------------------+---------------------+   |
-|  |                                                       |  |
-|  |                                                       |  |
-|  |                                                       |  |
-|  |                                                       |  |
-|  |                   Encrypted Data                      |  |
-|  |                                                       |  |
-|  |                                                       |  |
-|  |                                                       |  |
-|  |                                                       |  |
-+->+-------------------------------------------------------+<-+
-|  |                 Authentication Tag                    |  |
-|  +-------------------------------------------------------+  |
-|                                                             |
-|                                                             |
-+--- Encrypted Portion               Authenticated Portion ---+
-~~~~~
-
-
-## Encryption Schema
-
-SecObj encryption uses an AEAD encryption algorithm and hash function defined by the cipher suite in use (see cipher-suites).
+SecObj encryption uses an AEAD encryption algorithm and hash function
+defined by the cipher suite in use (see cipher-suites).
 
 We will refer to the following aspects of the AEAD algorithm below:
 
@@ -224,39 +197,47 @@ AEAD.Nk - The size in bytes of a key for the encryption algorithm
 
 AEAD.Nn - The size in bytes of a nonce for the encryption algorithm
 
-AEAD.Nt - The overhead in bytes of the encryption algorithm (typically the size of a "tag" that is added to the plaintext)
+AEAD.Nt - The overhead in bytes of the encryption algorithm
+          (typically the size of a "tag" that is added to the plaintext)
+
+
+An SecObj ciphertext comprises an header, followed by output of an AEAD
+encryption of the plaintext {{!RFC5116}} corresponding to the MOQT Object.
+The header consists of a variable length encoded integer called KID.
 
 
 ## Keys, Salts, and Nonces
 
-When encrypting objects within a MOQT Track, there is one secret `base_key`
-per `FullTrackName` on which is premised the encryption or decryption operations
-for the objects within that track.
+When encrypting objects within a MOQT Track, there is one secret called
+`base_key` per `FullTrackName` on which is premised the encryption or
+decryption operations for the objects within that track.
 
-The `base_key` is labeled with an integer KID value signaled in the SecObj header. The producers and consumers need to agree on which key should be used for a given KID and the purpose of the key, encryption or decryption only. The process for provisioning keys and their KID values is beyond the scope of this specification, but its security properties will bound the assurances that SecObj provides.
+The `base_key` is labeled with an integer KID value signaled in the SecObj
+header. The producers and consumers need to agree on which key should be used
+for a given KID and the purpose of the key, encryption or decryption only.
+The process for provisioning keys and their KID values is beyond the scope of
+this specification, but its security properties will bound the assurances
+that SecObj provides.
 
-When encrypting a MOQT object, the application specifies which `KID` and provides the `Nonce` to be used. The `Nonce`` is obtained from the composition of bits from the object's GroupId and the ObjectId fields in that order.
-
-When decrypting, the `base_key` for decryption is selected from the available keys using the KID value in the SecObj Header and Nonce value is derived from the incoming MOQT object header as mentioned above.
-
-A given key MUST NOT be used for encryption by multiple senders.  Such reuse
-would result in multiple encrypted objects being generated with the same (key,
+A given key MUST NOT be used for encryption by multiple senders unles it can
+be ensured that nonce isn't reused.  Sine such reuse would result in multiple
+encrypted objects being generated with the same (key,
 nonce) pair, which harms the protections provided by many AEAD algorithms.
 Implementations SHOULD mark each key as usable for encryption or decryption,
 never both.
 
-### Key Derivation
+### Key Derivation {#key-derivation}
 
-Secobj encryption and decryption  use a key and salt derived from the `base_key`
+Secobj encryption and decryption use a key and salt derived from the `base_key`
 associated to a KID.  Given a `base_key` value for a `FullTrackName` the key
 and salt are derived using HKDF {{!RFC5869}} as follows:
 
 ~~~~~
-def derive_key_salt(KID, base_key):
+def derive_key_salt(KID, FullTrackName, base_key):
   secobj_label = "SecObj 1.0 "
   secobj_secret = HKDF-Extract(secobj_label, base_key)
 
-  secobj_key_label = "SecObj 1.0 Secret key " + KID + cipher_suite
+  secobj_key_label = "SecObj 1.0 Secret key " + KID + FullTrackName + cipher_suite
   secobj_key = HKDF-Expand(secobj_secret, secobj_key_label, AEAD.Nk)
 
   secobj_salt_label = "SecObj 1.0 Secret salt " + KID + cipher_suite
@@ -277,13 +258,16 @@ The hash function used for HKDF is determined by the cipher suite in use.
 ### Encryption
 
 The key for encrypting MOQT objects from a given track is the `secobj_key`
-derived from the `base_key` corresponding to the track and the nonce is formed
-by XORing the `secobj_salt` with the application provided nonce value, encoded as a big-endian integer of length `AEAD.Nn`.
+derived from the `base_key` {{key-derivation}} corresponding to the track
+and the Nonce is formed by XORing the `secobj_salt` {{key-derivation}} with
+composition of bits from the object's GroupId and the ObjectId fields,
+as a big-endian integer of length `AEAD.Nn`.
 
 The encryptor forms an SecObj header using the KID value provided.
-The encoded header along with Nonce formed from  GroupId and ObjectId fields
-of the MOQT Object header is provided as AAD to the AEAD encryption operation,
-together with optional application-provided metadata which requires end to end authentication about the encrypted media (see {{metadata}}).
+The encoded header along with Nonce is provided as AAD to the AEAD
+encryption operation, together with optional application-provided metadata
+which would be benefitted from the end to  end authentication about the
+encrypted media (see {{metadata}}).
 
 The plaintext corresponds to the payload field of the MOQT Object.
 
@@ -357,33 +341,26 @@ def encrypt(Nonce, KID, metadata, plaintext):
 
 ### Decryption
 
-Before decrypting, a receiver needs to assemble a full SFrame ciphertext. When
-an SFrame ciphertext may be fragmented into multiple parts for transport (e.g.,
-a whole encrypted frame sent in multiple SRTP packets), the receiving client
-collects all the fragments of the ciphertext, using an appropriate sequencing
-and start/end markers in the transport. Once all of the required fragments are
-available, the client reassembles them into the SFrame ciphertext, then passes
-the ciphertext to SFrame for decryption.
-
-The KID field in the SFrame header is used to find the right key and salt for
-the encrypted frame, and the CTR field is used to construct the nonce. The SFrame
+For decrypting, the KID field in the SecObj header is used to find the
+right key and salt for the encrypted object, and the Nonce field is obtained
+from the `GroupId` and `Object` fields of the MOQT object metadata. The
 decryption procedure is as follows:
 
 ~~~~~
-def decrypt(metadata, sframe_ciphertext):
-  KID, CTR, header, ciphertext = parse_ciphertext(sframe_ciphertext)
+def decrypt(Nonce, secobj_ciphertext):
+  KID, ciphertext = parse_ciphertext(secobj_ciphertext)
 
-  sframe_key, sframe_salt = key_store[KID]
+  secobj_key, secobj_salt = key_store[KID]
 
-  ctr = encode_big_endian(CTR, AEAD.Nn)
-  nonce = xor(sframe_salt, ctr)
+  ctr = encode_big_endian(Nonce, AEAD.Nn)
+  nonce = xor(secobj_salt, ctr)
   aad = header + metadata
 
-  return AEAD.Decrypt(sframe_key, nonce, aad, ciphertext)
+  return AEAD.Decrypt(secobj_key, nonce, aad, ciphertext)
 ~~~~~
 
 If a ciphertext fails to decrypt because there is no key available for the KID
-in the SFrame header, the client MAY buffer the ciphertext and retry decryption
+in the SecObj header, the client MAY buffer the ciphertext and retry decryption
 once a key with that KID is received.  If a ciphertext fails to decrypt for any
 other reason, the client MUST discard the ciphertext. Invalid ciphertexts SHOULD be
 discarded in a way that is indistinguishable (to an external observer) from having
@@ -444,31 +421,10 @@ processed a valid ciphertext.
 ~~~~~
 {: title="Decrypting an MOQT Object Ciphertext" }
 
-The key associated to a give is not used directly as an AEAD key, but
-instead is used to derive a key and salt.  The derived key is used as the AEAD key, and the salt is used to derive nonces that is unique across cryptographic operations.
-
-```
-secret = HKDF_Extract(base_key, "moq" + full_track_name)
-key = HKDF_Expand(secret, "key", AEAD.Nk)
-salt = HKDF_Expand(secret, "salt", AEAD.Nn)
-```
-
-The nonce for encrypting an MoQ object for a given FullTrackName  is computed by XORing the salt with `ctr`, represented as a big-endian integer of `AEAD.Nn` bytes:
-
-```
-nonce = salt ^ ctr
-```
-
-If the value of `CTR` is greater than or equal to `1 << AEAD.Nn`, then
-the object cannot be encrypted and an error must be returned.
-
-Deriving a key and salt for each FullTrackName ensures that even if two tracks
-use the same base key, they will have distinct AEAD keys, and thus independent
-nonce spaces.
 
 
 # Security Considerations
-
+TODO
 
 # IANA Considerations
 
