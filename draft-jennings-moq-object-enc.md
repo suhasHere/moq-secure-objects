@@ -1,5 +1,5 @@
 ---
-title: SecureObject - An E2E Object Protection Scheme for MOQ
+title: Secure Objects for Media over Quic
 abbrev: SecureObject
 docname: draft-jennings-moq-object-enc-latest
 category: std
@@ -46,20 +46,33 @@ over Media over QUIC Transport (MOQT).
 
 # Introduction
 
-Media Over QUIC Transport (MOQT) is a protocol that is optimized for the QUIC protocol, either directly or via WebTransport, for the dissemination of media. MOQT defines a publish/subscribe media delivery layer across set of participating relays for supporting wide range of use-cases with different resiliency and latency (live, interactive) needs without compromising the scalability and cost effectiveness associated with content delivery networks.
+Media Over QUIC Transport (MOQT) is a protocol that is optimized for the
+QUIC protocol, either directly or via WebTransport, for the
+dissemination of delivery of low latency media.  MOQT defines a
+publish/subscribe media delivery layer across set of participating
+relays for supporting wide range of use-cases with different resiliency
+and latency (live, interactive) needs without compromising the
+scalability and cost effectiveness associated with content delivery
+networks. It supports sending media objects through sets of relays
+nodes.
 
-Typically a MOQ Relay doesn't need to access the media content, thus allowing
-for the media to be "end-to-end" encrypted so that it cannot be decrypted by the relays. However for the relays to participate effectively in the media delivery,
-it needs to able to access metadata of a MOQT object to carryout the
-required store and forward functions.
+Typically a MOQ Relay doesn't need to access the media content, thus
+allowing for the media to be "end-to-end" encrypted so that it cannot be
+decrypted by the relays. However for the relays to participate
+effectively in the media delivery, it needs to able to access naming
+information of a MOQT object to carryout the required store and forward
+functions.
 
 As such, two layers of encryption and authentication are required:
 
 - Hop-by-hop (HBH) encryption achieved through QUIC connection per hop and
 - End-to-end (E2E) encryption (E2EE) of media between the endpoints.
 
-This document proposes a E2EE protection scheme known as moq-enc, an object level
-protection scheme designed to work in settigns where MOQT based media delivery is anticipated.
+The HBH security is provided by TLS in the QUIC connection that MoQT
+runs over. MoQT support different E2EE protection as well as allowing no
+E2EE security.
+
+This document defines an E2EE protection scheme known as secure object.
 
 # Terminology
 
@@ -93,7 +106,7 @@ MOQT defines a publish/subscribe based media delivery protocol, where in
 endpoints, called producers, publish objects which are delivered via
 participating relays to receiving endpoints, called consumers.
 
-Section 2 of MoQTransport defines hierarchical object model for
+Section 2 of MoQ Transport defines hierarchical object model for
 application data, comprised of objects, groups and tracks.
 
 Objects defines the basic data element, an addressable unit whose payload
@@ -151,7 +164,7 @@ producer and consumer. The application is solely responsible for the content
 of the object payload.
 
 Tracks are identified by a combination of its `TrackNamespace ` and `TrackName`.
-Group and Objects are represented as varibale length integers called GroupId and
+Group and Objects are represented as variable length integers called GroupId and
 ObjectId respectively. GroupId and ObjectId increase monotonically for tracks
 that are actively publishing media.
 
@@ -161,23 +174,23 @@ For purposes of this specification, we define `FullTrackName` as :
 FullTrackName = TrackNamespace + TrackName
 ~~~
 
-and  "MOQT Object Name" or "Object Name" is combination of following properties:
+and  'ObjectName' is combination of following properties:
 
 ~~~
-MOQTObjectName = (FullTrackName, GroupId, ObjectId)
+ObjectName = (FullTrackName, GroupId, ObjectId)
 ~~~
 
-## Requirements
 
-Applications using MOQT for their media delivery MUST ensure the following
-requirements are enforced to meet the security assurances from the
-protection mechanisms defined in this specification:
+Two important properties of objects are:
 
-- A given `FullTrackName` MUST uniquely identify a single producer within a MOQT Session.
+1. ObjetNames are globally unique in a given relay network. 
 
-- `GroupId` MUST NOT be duplicated within a Track.
+2. The data inside an object ( and it's size) can never change after the
+object is first published. There can never be two objects with the same
+name but different data.
 
-- `ObjectId` MUST NOT be duplicated within a group.
+One of the ways system keep the names unique is by using a fully qualified
+domain names or UUIDs as part of the TrackNamespace.
 
 
 # Secure Object
@@ -186,12 +199,13 @@ This document defines an encryption mechanism, called SecureObject(SecObj),
 that provides effective E2EE protection with a minimal encryption bandwidth
 overhead.
 
-SecObj encryption uses an AEAD encryption algorithm and hash function
+SecObj encryption uses an AEAD function
 defined by the cipher suite in use (see cipher-suites).
 
 We will refer to the following aspects of the AEAD algorithm below:
 
-AEAD.Encrypt and AEAD.Decrypt - The encryption and decryption functions for the AEAD.
+AEAD.Encrypt and AEAD.Decrypt - The encryption and decryption functions
+for the AEAD.
 
 AEAD.Nk - The size in bytes of a key for the encryption algorithm
 
@@ -201,12 +215,25 @@ AEAD.Nt - The overhead in bytes of the encryption algorithm
           (typically the size of a "tag" that is added to the plaintext)
 
 
-An SecObj ciphertext comprises an header, followed by output of an AEAD
+An SecObj cipher text comprises an header, followed by output of an AEAD
 encryption of the plaintext {{!RFC5116}} corresponding to the MOQT Object.
 The header consists of a variable length encoded integer called KID.
 
 
 ## Keys, Salts, and Nonces
+
+In MoQ, for some use cases, like streaming a video clip, all the objects
+in a track will often be encrypted with the same base key. However in
+other uses cases, like a conference call, the keys may change as the
+participate of the conference come and go. For this type of scenario,
+different object in the same track will end up encrypt with different
+keys. Each encrypted object also carries an unencrypted Key Identifier
+(KID) which is a small integer that identifies, within the scope of this
+track, which key is being used to encrypt the object. The actually keys
+for each KID and FullTrackName are exchanged between the devices
+encrypting and decrypt in ways that are out of scope of this
+specification.
+
 
 When encrypting objects within a MOQT Track, there is one secret called
 `base_key` per `FullTrackName` on which is premised the encryption or
@@ -219,7 +246,7 @@ The process for provisioning keys and their KID values is beyond the scope of
 this specification, but its security properties will bound the assurances
 that SecObj provides.
 
-A given key MUST NOT be used for encryption by multiple senders unles it can
+A given key MUST NOT be used for encryption by multiple senders unless it can
 be ensured that nonce isn't reused.  Sine such reuse would result in multiple
 encrypted objects being generated with the same (key,
 nonce) pair, which harms the protections provided by many AEAD algorithms.
@@ -233,25 +260,27 @@ associated to a KID.  Given a `base_key` value for a `FullTrackName` the key
 and salt are derived using HKDF {{!RFC5869}} as follows:
 
 ~~~~~
-def derive_key_salt(KID, FullTrackName, base_key):
-  secobj_label = "SecObj 1.0 "
+  secobj_label = "SecObj 1.0"
   secobj_secret = HKDF-Extract(secobj_label, base_key)
 
-  secobj_key_label = "SecObj 1.0 Secret key " + KID + FullTrackName + cipher_suite
+  secobj_key_label = "SecObj 1.0 Secret key" | KID |  cipher_suite | FullTrackName 
   secobj_key = HKDF-Expand(secobj_secret, secobj_key_label, AEAD.Nk)
 
-  secobj_salt_label = "SecObj 1.0 Secret salt " + KID + cipher_suite
+  secobj_salt_label = "SecObj 1.0 Secret salt" | KID |  cipher_suite
   secobj_salt = HKDF-Expand(secobj_secret, secobj_salt_label, AEAD.Nn)
-
-  return secobj_key, secobj_salt
 ~~~~~
 
 In the derivation of `secobj_secret`:
 
-* The `+` operator represents concatenation of byte strings.
+* The `|` operator represents concatenation of byte strings.
 
-* The `cipher_suite` value is a 2-byte big-endian integer representing the
+* The `cipher_suite` value is a 16 bit big-endian integer representing the
   cipher suite in use (see cipher-suites).
+
+* The KID is a 128 bit big-endian integer.
+
+* The FullTrackName is encoded as it would be encoded on the wire in
+  MoQT which uses variable length integers for the GroupID and ObjectID.
 
 The hash function used for HKDF is determined by the cipher suite in use.
 
@@ -424,13 +453,18 @@ processed a valid ciphertext.
 
 
 # Security Considerations
+
 TODO
 
 # IANA Considerations
 
 ## SecObj Cipher Suites
 
-This registry lists identifiers for SecObj cipher suites, as defined in cipher-suites.  The cipher suite field is two bytes wide, so the valid cipher suites are in the range 0x0000 to 0xFFFF.
+This registry lists identifiers for SecObj cipher suites, as defined in
+cipher-suites.  The cipher suite field is two bytes wide, so the valid
+cipher suites are in the range 0x0000 to 0xFFFF. Values less that 128
+are allocated by "IESG Approval" (ref rfc8126) while others values are
+"First Come First Served".
 
 Template:
 
@@ -438,15 +472,21 @@ Template:
 
 * Name: The name of the cipher suite
 
+* Tag Length: Length of tag in bits 
+
+* Usage: Optional, Recommended, or Prohibited
+
 * Reference: The document where this wire format is defined
+
+
 
 Initial contents:
 
 
-| Value  | Name                          | Reference |
-|:-------|:------------------------------|:----------|
-| 0x0001 | `AES_128_GCM_SHA256_128`      | RFC XXXX  |
-| 0x0002 | `AES_256_GCM_SHA512_128`      | RFC XXXX  |
+| Value  | Name                          | Tag | Usage |  Reference |
+|:-------|:------------------------------|----:|:------|:-----------|
+| 0x0001 | `AES_128_GCM_SHA256_128`      | 128 | Recommended| RFC XXXX  |
+| 0x0002 | `AES_256_GCM_SHA512_128`      | 128 | Optional | RFC XXXX  |
 {: #iana-cipher-suites title="SecObj cipher suites" }
 
 
