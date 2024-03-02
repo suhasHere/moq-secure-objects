@@ -1,6 +1,6 @@
 # Secure Objects
 
-This is the working area for the individual Internet-Draft, "MoQ Secure Objects".
+This is the working area for the individual Internet-Draft, "MoQ Secure Objects", a light weight symmetric encryption scheme for securing MoQ objects.
 
 
 * [Editor's Copy](https://suhasHere.github.io/moq-secure-objects/#go.draft-jennings-moq-secure-objects.html)
