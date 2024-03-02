@@ -15,7 +15,7 @@ venue:
   mail: "moq@ietf.org"
   arch: "https://mailarchive.ietf.org/arch/browse/moq/"
   github: "suhasHere/moq-secure-objects"
-  latest: ""https://suhashere.github.io/moq-secure-objects/#go.draft-jennings-moq-secure-objects.html"
+  latest: "https://suhashere.github.io/moq-secure-objects/#go.draft-jennings-moq-secure-objects.html"
 
 author:
  -
@@ -297,23 +297,31 @@ The hash function used for HKDF is determined by the cipher suite in use.
 The key for encrypting MOQT objects from a given track is the `secobj_key`
 derived from the `base_key` {{key-derivation}} corresponding to the track.
 
+Both the ObjectID and GroupID MUST be less than 2^48-1.
+The N_MIN from the AEAD cipher MUST be at least 12 to have space for the
+object and group IDs to fit in the nonce.
+
 The Nonce is formed by XORing the `secobj_salt` {{key-derivation}} with
 bits from the GroupId | ObjectId where both the GroupId and ObjectId are
-treated as 64 bit big-endian integer.
+treated as 48 bit big-endian integer.
 Note that for the size of the Nonce is defined by the underlying AEAD
 algorithm in use but that for the algorithm referenced here, it is 12
 octets.
-The N_MIN from the AEAD cipher MUST be at least 8 to space for the
-object and group IDs to fit in the nonce.
 
-The encryptor forms an SecObj header using the KID value provided,
-followed by the headers from the MoQ Object. Note the headers from MoQ
+The encryptor forms an SecObj header using the KID value provided.
+
+followed by the Object ID and Group ID from the MoQ Object.
+
+Note the headers from MoQ
 Object include the GroupID and ObjectID so these can be recovered out
 of the AAD data when doing the decryption.
 
-The encoded SecObj header is provided as AAD to the AEAD encryption
-operation. The payload field from the MoQ object is used by the AEAD
+The AAD data is formed by concatinating the SecHeader, GroupID, and ObjectID.
+The payload field from the MoQ object is used by the AEAD
 algorithm for the plaintext.
+
+The final SecureObject is formedf from thr Sec Object Header, follow by
+th MoQ transport headers, followed by the outut of the encryption.
 
 ~~~~~
 def encrypt(Nonce, KID, envelope, plaintext):
@@ -321,13 +329,13 @@ def encrypt(Nonce, KID, envelope, plaintext):
 
   nonce = xor(secobj_salt, encode_big_endian( GroupID | ObjectID  )
 
-  secobj_header = encode_var_int(KID) | MoqObjHeaders
-  aad = secobj_header
+  secobj_header = encode_var_int(KID)
+  aad = secobj_header  | GroupID | ObjectID
 
   plaintext = MoqObjPayload
 
   ciphertext = AEAD.Encrypt(secobj_key, nonce, aad, plaintext)
-  return secobj_header | ciphertext
+  return ciphertext
 ~~~~~
 
 
@@ -394,15 +402,17 @@ decryption procedure is as follows:
 
 ~~~~~
 def decrypt(Nonce, secobj_ciphertext):
-  KID, ciphertext, MoqObjHeaders = parse_ciphertext(secobj_ciphertext)
+  KID, ciphertext, GroupID, ObjectID = parse_ciphertext(secobj_ciphertext)
 
   secobj_key, secobj_salt = key_store[KID]
 
   nonce = xor(secobj_salt, encode_big_endian( GroupID | ObjectID  )
 
+  aad = secobj_header  | GroupID | ObjectID
+
   payload = AEAD.Decrypt(secobj_key, nonce, aad, ciphertext)
 
-  return MoqObjHeaders | payload
+  return MoQ_payload
 ~~~~~
 
 If a ciphertext fails to decrypt because there is no key available for the KID
