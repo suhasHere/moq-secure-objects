@@ -233,7 +233,7 @@ When encrypting objects within a MOQT Track, there is one secret called
 decryption operations for the objects within that track.
 
 In MoQ, for some use cases, like streaming a video clip, all the objects
-in a track will often be encrypted with the same base key for that track. 
+in a track will often be encrypted with the same base key for that track.
 However in other uses cases, like a conference call, the keys may change as the
 participants of the conference come and go. For this type of scenario,
 different object in the same track will end up being protected with different
@@ -314,7 +314,7 @@ Below figure depicts the encryption process described
 +----------------+         |                |
 |  Object ID     |         |                |
 +----------------+         |                |
-|        |             +------------+       |               
+|        |             +------------+       |
 |<-------|-----------  |    KID     |       | Object
 |        |<------------|            |       | Payload
 |        |             +------------+       |
@@ -360,7 +360,6 @@ decryption procedure is as follows:
 2. Retrieve the `secobj_key` and `secobj_salt` matching the KID.
 
 3. Form the nonce by XORing secobj_salt, the bits from `GroupID | ObjectId` encoded as big-endian integer.
-
 
 4. From the aad input by bitwse concatenating SecObj header with the Group and the ObjectId fields.
 
