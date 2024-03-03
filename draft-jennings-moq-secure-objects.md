@@ -204,7 +204,7 @@ qualified domain names or UUIDs as part of the TrackNamespace.
 
 # Secure Object {#sec-obj}
 
-This document defines an encryption mechanism, called Secure
+This document defines an protection mechanism, called Secure
 Object(SecObj), that provides effective E2EE protection with a minimal
 encryption bandwidth overhead.
 
@@ -256,7 +256,7 @@ unless it can be ensured that nonce isn't reused.  Sine such reuse would
 result in multiple encrypted objects being generated with the same (key,
 nonce) pair, which harms the protections provided by many AEAD
 algorithms.  MoQ does not allow two different objects to have the same
-FullObjectName so the way the nonce is generated ( see section {{nonce}} )
+FullObjectName, so the way the nonce is generated ( see section {{nonce}} )
 protects against nonce reuse. Implementations SHOULD mark each key as
 usable for encryption or decryption.
 
@@ -292,7 +292,7 @@ The hash function used for HKDF is determined by the cipher suite in use.
 ## Nonce Creation {#nonce}
 
 The Nonce is formed by XORing the `secobj_salt` {{keys}} with bits from
-the concatinating the GroupId and ObjectId, where both the GroupId and
+the concatenating the GroupId and ObjectId, where both the GroupId and
 ObjectId are treated as 48 bit big-endian integer. Both the ObjectID and
 GroupID MUST be less than 2^48-1. The N_MIN from the AEAD cipher MUST be
 at least 12 to have space for the object and group IDs to fit in the
@@ -306,7 +306,7 @@ KID, GroupID, and ObjectID where each of these is encoded as a
 big-endian 64 bit integer.
 
 
-# Encryption {#enbcrypt}
+# Encryption {#encrypt}
 
 The key for encrypting MOQT objects from a given track is the
 `secobj_key` derived from the track_base_key {{keys}}
@@ -319,21 +319,27 @@ The encryptor forms an SecObj header using the KID value provided.
 
 The encryption procedure is as follows:
 
-1. From thre MoqObject to obtain MOQT object payload as the plaintext to
-   encrypt. Get the GroupID and ObjectId from the MOQT object envelope.
+1. From the MoqObject to obtain MOQT object payload as the plaintext to
+   encrypt. Get the GroupId and ObjectId from the MOQT object envelope.
 
 2. Retrieve the `secobj_key` and `secobj_salt` matching the KID.
 
 3. Form the nonce by as described in {{nonce}}.
 
-4. From the aad input as described in {{aad}}.
+4. Form the aad input as described in {{aad}}.
 
 5. Apply the AEAD encryption function with secobj_key, nonce, aad and
    ciphertext as inputs.
 
 The final SecureObject is formed from the MOQT transport headers, then
-the KID encdodec as a minimuim length variale length integer as defined
-in MoQT, follow by the followed by the output of the encryption.
+the KID encdoded as QUIC variale length integer{{!RFC9000}}, followed by the output of the encryption
+
+~~~~
++-----------------+------------------+-----------------+
+|    MOQT Object  |   SecObj Header  |     SecObject   |
+|    Header       |     (KID)        |     Ciphertext  |
++-----------------+------------------+-----------------+
+~~~~
 
 Below figure depicts the encryption process described
 
@@ -399,14 +405,14 @@ envelope.
 The decryption procedure is as follows:
 
 1. Parse the SecureObject to obtain KID, the ciphertext corresponding
-   from the MOQT object payload and the GroupID and ObjectId from the MOQT
-object envelope.
+   to MOQT object payload and the GroupID and ObjectId from the MOQT
+   object envelope.
 
 2. Retrieve the `secobj_key` and `secobj_salt` matching the KID.
 
 3. Form the nonce by as described in {{nonce}}.
 
-4. From the aad input as described in {{aad}}.
+4. Form the aad input as described in {{aad}}.
 
 5. Apply the AEAD decryption function with secobj_key, nonce, aad and
    ciphertext as inputs.
