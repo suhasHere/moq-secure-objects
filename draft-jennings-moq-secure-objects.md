@@ -223,10 +223,10 @@ AEAD_TAG_SIZE: The overhead in bytes of the encryption algorithm
 
 An SecObj cipher text comprises an header, followed by output of an AEAD
 encryption of the plaintext {{!RFC5116}} corresponding to the MOQT Object.
-The header consists of a variable length encoded integer called KID (see {{keys}}).
+The header consists of a variable length encoded integer called KID.
 
 
-## Keys, Salts, and Nonces {#keys}
+## Keys, Salts, and Nonces
 
 When encrypting objects within a MOQT Track, there is one secret called
 `track_base_key` per `FullTrackName` on which is premised the encryption or
@@ -252,7 +252,7 @@ MoQ does not allow two different objects to have the same FullObjectName
 so the way the nonce is generated ( see section TODO ) protects against
 NONCE reuse. Implementations SHOULD mark each key as usable for encryption or decryption.
 
-### Key Derivation {#key-derivation}
+## Key Derivation {#key-derivation}
 
 Secobj encryption and decryption use a key and salt derived from the `track_base_key` associated to a KID.  Given a `track_base_key` value for a `FullTrackName` the key and salt are derived using HKDF {{!RFC5869}} as follows:
 
@@ -278,7 +278,7 @@ In the above derivation :
 
 The hash function used for HKDF is determined by the cipher suite in use.
 
-### Encryption
+## Encryption
 
 The key for encrypting MOQT objects from a given track is the `secobj_key` derived from the track_base_key {{key-derivation}} corresponding to the track.
 
@@ -348,11 +348,11 @@ Below figure depicts the encryption process described
 ~~~~~
 {: title="Encrypting a MOQT Object Ciphertext" }
 
-### Decryption
+## Decryption
 
 For decrypting, the KID field in the SecObj header is used to find the
 right key and salt for the encrypted object, and the nonce field is obtained
-from the `GroupId` and `Object` fields of the MOQT object envelope. The
+from the `GroupId` and `ObjectId` fields of the MOQT object envelope. The
 decryption procedure is as follows:
 
 1. Parse the SecureObject to obtain KID from the SecObj header, the ciphertext corresponding to the MOQT object payload and Group and ObjectId from the MOQT object envelope.
@@ -363,7 +363,7 @@ decryption procedure is as follows:
 
 4. From the aad input by bitwse concatenating SecObj header with the Group and the ObjectId fields.
 
-Apply the decryption function with secobj_key, nonce, add and ciphertext as inputs.
+Apply the decryption function with secobj_key, nonce, aad and ciphertext as inputs.
 
 If a ciphertext fails to decrypt because there is no key available for the KID
 in the SecObj header, the client MAY buffer the ciphertext and retry decryption
@@ -372,7 +372,8 @@ other reason, the client MUST discard the ciphertext. Invalid ciphertext SHOULD 
 discarded in a way that is indistinguishable (to an external observer) from having
 processed a valid ciphertext.
 
-Below figure depicts the decryption process.
+Below figure depicts the decryption process:
+
 ~~~~~
 
 
