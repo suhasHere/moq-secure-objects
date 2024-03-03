@@ -291,19 +291,19 @@ The hash function used for HKDF is determined by the cipher suite in use.
 
 ## Nonce Creation {#nonce}
 
-The Nonce is formed by XORing the `secobj_salt` {{keys}} with
-bits from the GroupId | ObjectId, where both the GroupId and ObjectId
-are treated as 48 bit big-endian integer. Both the ObjectID and GroupID
-MUST be less than 2^48-1. The N_MIN from the AEAD cipher MUST be at
-least 12 to have space for the object and group IDs to fit in the
+The Nonce is formed by XORing the `secobj_salt` {{keys}} with bits from
+the concatinating the GroupId and ObjectId, where both the GroupId and
+ObjectId are treated as 48 bit big-endian integer. Both the ObjectID and
+GroupID MUST be less than 2^48-1. The N_MIN from the AEAD cipher MUST be
+at least 12 to have space for the object and group IDs to fit in the
 nonce. Note that the size of the nonce is defined by the underlying AEAD
 algorithm in use but for the algorithm referenced here, it is 12 octets.
 
 ## Additional Authenticated Data {#aad}
 
 The additional authenticated data (AAD) is formed by concatinating the
-KID, GroupID, and ObjectID where each of these is encoded as a big
-endian 64 bit integer.
+KID, GroupID, and ObjectID where each of these is encoded as a
+big-endian 64 bit integer.
 
 
 # Encryption {#enbcrypt}
@@ -317,8 +317,23 @@ algorithm for the plaintext.
 
 The encryptor forms an SecObj header using the KID value provided.
 
-The final SecureObject is formed from the SecObject Header, follow by the
-MOQT transport headers, followed by the output of the encryption.
+The encryption procedure is as follows:
+
+1. From thre MoqObject to obtain MOQT object payload as the plaintext to
+   encrypt. Get the GroupID and ObjectId from the MOQT object envelope.
+
+2. Retrieve the `secobj_key` and `secobj_salt` matching the KID.
+
+3. Form the nonce by as described in {{nonce}}.
+
+4. From the aad input as described in {{aad}}.
+
+5. Apply the AEAD encryption function with secobj_key, nonce, aad and
+   ciphertext as inputs.
+
+The final SecureObject is formed from the MOQT transport headers, then
+the KID encdodec as a minimuim length variale length integer as defined
+in MoQT, follow by the followed by the output of the encryption.
 
 Below figure depicts the encryption process described
 
@@ -376,16 +391,16 @@ Below figure depicts the encryption process described
 
 # Decryption {#decrypt}
 
-For decrypting, the KID field in the SecObj header is used to find the
+For decrypting, the KID field in the received data is used to find the
 right key and salt for the encrypted object, and the nonce field is
 obtained from the `GroupId` and `ObjectId` fields of the MOQT object
 envelope.
 
 The decryption procedure is as follows:
 
-1. Parse the SecureObject to obtain KID from the SecObj header, the
-ciphertext corresponding from the MOQT object payload and Group and
-ObjectId from the MOQT object envelope.
+1. Parse the SecureObject to obtain KID, the ciphertext corresponding
+   from the MOQT object payload and the GroupID and ObjectId from the MOQT
+object envelope.
 
 2. Retrieve the `secobj_key` and `secobj_salt` matching the KID.
 
