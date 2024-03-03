@@ -379,22 +379,22 @@ Below figure depicts the encryption process described
 For decrypting, the KID field in the SecObj header is used to find the
 right key and salt for the encrypted object, and the nonce field is
 obtained from the `GroupId` and `ObjectId` fields of the MOQT object
-envelope. The decryption procedure is as follows:
+envelope.
+
+The decryption procedure is as follows:
 
 1. Parse the SecureObject to obtain KID from the SecObj header, the
-ciphertext corresponding to the MOQT object payload and Group and
+ciphertext corresponding from the MOQT object payload and Group and
 ObjectId from the MOQT object envelope.
 
 2. Retrieve the `secobj_key` and `secobj_salt` matching the KID.
 
-3. Form the nonce by XORing secobj_salt, the bits from `GroupID |
-ObjectId` encoded as big-endian integer.
+3. Form the nonce by as described in {{nonce}}.
 
-4. From the aad input by bitwse concatenating SecObj header with the
-Group and the ObjectId fields.
+4. From the aad input as described in {{aad}}.
 
-Apply the decryption function with secobj_key, nonce, aad and ciphertext
-as inputs.
+5. Apply the AEAD decryption function with secobj_key, nonce, aad and
+   ciphertext as inputs.
 
 If a ciphertext fails to decrypt because there is no key available for
 the KID in the SecObj header, the client MAY buffer the ciphertext and
