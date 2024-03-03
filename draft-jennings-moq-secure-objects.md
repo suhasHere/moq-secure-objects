@@ -75,7 +75,7 @@ E2EE security.
 A goal of the design is to minimize the amount of additional data the
 encryptions requires for each object. This is particularly important for
 very low bit rate audio applications where the encryption overhead can
-become a significant port of the total bandwidth.
+become a significant portion of the total bandwidth.
 
 This document defines an E2EE protection scheme known as Secure Object.
 
@@ -103,7 +103,7 @@ Producer:
 : Software that creates and encrypts MoQ Objects.
 
 Consumer:
-: Software that de-crypts MoQ Objects.
+: Software that decrypts MoQ Objects.
 
 # MOQT Object Model Recap
 
@@ -176,10 +176,11 @@ ObjectId respectively.
 For purposes of this specification, we define `FullTrackName` as :
 
 ~~~
-FullTrackName = TrackNamespace + TrackName
+FullTrackName = TrackNamespace | TrackName
 ~~~
+where '|' representations concatenation of byte strings,
 
-and  'ObjectName' is combination of following properties:
+and  `ObjectName` is combination of following properties:
 
 ~~~
 ObjectName = (FullTrackName, GroupId, ObjectId)
@@ -194,7 +195,7 @@ Two important properties of objects are:
 object is first published. There can never be two objects with the same
 name but different data.
 
-One of the ways system keep the names unique is by using a fully qualified
+One of the ways system keep the object names unique is by using a fully qualified
 domain names or UUIDs as part of the TrackNamespace.
 
 
@@ -204,8 +205,8 @@ This document defines an encryption mechanism, called Secure Object(SecObj),
 that provides effective E2EE protection with a minimal encryption bandwidth
 overhead.
 
-SecObj encryption uses an AEAD function (TODO REF rfc5116) defined by
-the cipher suite in use (see cipher-suites).
+SecObj encryption uses an AEAD function {{!RFC5116}} defined by
+the cipher suite in use (see {{cipher-suites}}).
 
 We will refer to the following aspects of the AEAD algorithm below:
 
@@ -222,62 +223,51 @@ AEAD_TAG_SIZE: The overhead in bytes of the encryption algorithm
 
 An SecObj cipher text comprises an header, followed by output of an AEAD
 encryption of the plaintext {{!RFC5116}} corresponding to the MOQT Object.
-The header consists of a variable length encoded integer called KID.
+The header consists of a variable length encoded integer called KID (see {{keys}}).
 
 
-
-## Keys, Salts, and Nonces
+## Keys, Salts, and Nonces {#keys}
 
 When encrypting objects within a MOQT Track, there is one secret called
 `track_base_key` per `FullTrackName` on which is premised the encryption or
 decryption operations for the objects within that track.
 
-The `base_key` is labeled with an integer KID value signalled in the SecObj
-header. The producers and consumers need to agree on which key should be used
-for a given KID and the purpose of the key, encryption or decryption only.
-The process for provisioning keys and their KID values is beyond the scope of
-this specification, but its security properties will bound the assurances
-that SecObj provides.
-
 In MoQ, for some use cases, like streaming a video clip, all the objects
-in a track will often be encrypted with the same base key. However in
-other uses cases, like a conference call, the keys may change as the
-participate of the conference come and go. For this type of scenario,
-different object in the same track will end up encrypt with different
-keys. Each encrypted object also carries an unencrypted Key Identifier
-(KID) which is a small integer that identifies, within the scope of this
-track, which key is being used to encrypt the object. The actually keys
+in a track will often be encrypted with the same base key for that track. 
+However in other uses cases, like a conference call, the keys may change as the
+participants of the conference come and go. For this type of scenario,
+different object in the same track will end up being protected with different
+base keys. Each encrypted object also carries an unencrypted "Key Identifier
+(KID)" which is a small integer that identifies, within the scope of this
+track, the base key being used to encrypt the object. The actual keys
 for each KID and FullTrackName are exchanged between the devices
-encrypting and decrypt in ways that are out of scope of this
+encrypting and decrypting in ways that are out of scope of this
 specification.
 
-A given key MUST NOT be used for encryption by multiple senders unless it can
+The producers and consumers need to agree on which key should be used for a given KID and the purpose of the key, encryption or decryption only. A given key MUST NOT be used for encryption by multiple senders unless it can
 be ensured that nonce isn't reused.  Sine such reuse would result in multiple
 encrypted objects being generated with the same (key,
 nonce) pair, which harms the protections provided by many AEAD algorithms.
 MoQ does not allow two different objects to have the same FullObjectName
 so the way the nonce is generated ( see section TODO ) protects against
-NONCE reuse.
-Implementations SHOULD mark each key as usable for encryption or decryption.
+NONCE reuse. Implementations SHOULD mark each key as usable for encryption or decryption.
 
 ### Key Derivation {#key-derivation}
 
-Secobj encryption and decryption use a key and salt derived from the `base_key`
-associated to a KID.  Given a `base_key` value for a `FullTrackName` the key
-and salt are derived using HKDF {{!RFC5869}} as follows:
+Secobj encryption and decryption use a key and salt derived from the `track_base_key` associated to a KID.  Given a `track_base_key` value for a `FullTrackName` the key and salt are derived using HKDF {{!RFC5869}} as follows:
 
 ~~~~~
   secobj_label = "SecObj 1.0"
-  secobj_secret = HKDF-Extract(secobj_label, base_key)
+  secobj_secret = HKDF-Extract(secobj_label, track_base_key)
 
-  secobj_key_label = "SecObj 1.0 Secret key" | KID |  cipher_suite | FullTrackName
+  secobj_key_label = "SecObj 1.0 Secret key" | KID | cipher_suite | FullTrackName
   secobj_key = HKDF-Expand(secobj_secret, secobj_key_label, AEAD_KEY_SIZE)
 
-  secobj_salt_label = "SecObj 1.0 Secret salt" | KID |  cipher_suite
+  secobj_salt_label = "SecObj 1.0 Secret salt" | KID | cipher_suite
   secobj_salt = HKDF-Expand(secobj_secret, secobj_salt_label, AEAD_NONCE_SIZE)
 ~~~~~
 
-In the derivation of `secobj_secret`:
+In the above derivation :
 
 * The `|` operator represents concatenation of byte strings.
 
@@ -286,109 +276,74 @@ In the derivation of `secobj_secret`:
 
 * The KID is a 64 bit big-endian integer.
 
-* The FullTrackName is encoded as it would be encoded on the wire in
-  MoQT which minimum size variable length integers for the GroupID and
-  ObjectID.
-
 The hash function used for HKDF is determined by the cipher suite in use.
 
 ### Encryption
 
-The key for encrypting MOQT objects from a given track is the `secobj_key`
-derived from the `base_key` {{key-derivation}} corresponding to the track.
-
-Both the ObjectID and GroupID MUST be less than 2^48-1.
-The N_MIN from the AEAD cipher MUST be at least 12 to have space for the
-object and group IDs to fit in the nonce.
+The key for encrypting MOQT objects from a given track is the `secobj_key` derived from the track_base_key {{key-derivation}} corresponding to the track.
 
 The Nonce is formed by XORing the `secobj_salt` {{key-derivation}} with
-bits from the GroupId | ObjectId where both the GroupId and ObjectId are
-treated as 48 bit big-endian integer.
-Note that for the size of the Nonce is defined by the underlying AEAD
-algorithm in use but that for the algorithm referenced here, it is 12
-octets.
+bits from the GroupId | ObjectId, where both the GroupId and ObjectId are
+treated as 48 bit big-endian integer. Both the ObjectID and GroupID MUST be less than 2^48-1. The N_MIN from the AEAD cipher MUST be at least 12 to have space for the object and group IDs to fit in the nonce. Note that the size of the nonce is defined by the underlying AEAD algorithm in use but for the algorithm referenced here, it is 12 octets.
 
 The encryptor forms an SecObj header using the KID value provided.
 
-followed by the Object ID and Group ID from the MoQ Object.
+The AAD data is formed by concatinating the SecObj Header, GroupID, and ObjectID.
+The payload field from the MOQT object is used by the AEAD algorithm for the plaintext.
 
-Note the headers from MoQ
-Object include the GroupID and ObjectID so these can be recovered out
-of the AAD data when doing the decryption.
+The final SecureObject is formed from the SecObject Header, follow by
+th MOQT transport headers, followed by the output of the encryption.
 
-The AAD data is formed by concatinating the SecHeader, GroupID, and ObjectID.
-The payload field from the MoQ object is used by the AEAD
-algorithm for the plaintext.
-
-The final SecureObject is formedf from thr Sec Object Header, follow by
-th MoQ transport headers, followed by the outut of the encryption.
-
-~~~~~
-def encrypt(Nonce, KID, envelope, plaintext):
-  secobj_key, secobj_salt = key_store[KID]
-
-  nonce = xor(secobj_salt, encode_big_endian( GroupID | ObjectID  )
-
-  secobj_header = encode_var_int(KID)
-  aad = secobj_header  | GroupID | ObjectID
-
-  plaintext = MoqObjPayload
-
-  ciphertext = AEAD.Encrypt(secobj_key, nonce, aad, plaintext)
-  return ciphertext
-~~~~~
-
+Below figure depicts the encryption process described
 
 ~~~~~
 
                                   +----------------+
                                   |                |
-        +-------------------------|      MOQ       |
+        +-------------------------|      MOQT      |
         |                  +------|     Object     |
         |                  |      |                |
         |                  |      +--------+-------+
-        |                  |               |
-        |                  |               |
-        |                  |               |
-        |                  |               |
-        |                  | Full          |
-+----------------+         |Track          |
-|    GroupId     |         | Name          |
-+----------------+         |               |
-|  Object ID     |         |               |
-+----------------+         |               |
-        |                  |               |
-        |             +------------+       |
-        |<------------|    KID     |       |
-        |              ------------+       |
-        |  secobj_salt      |              |
-        |                   |              |
-        |                   |              |
-        v                   | secobj_key   |
-  +-----------+             |              |
-  |  NONCE    |             |              |
-  +-----------+             |              |
-        |                   |              |
-        |                   v              |
-        |           +--------------+       |
-        |           |              |       |
-        +---------->| AEAD.Encrypt |<------+
-                    |              |
-                    +-------+------+
-                            |
-                            |
-                            |
-                            v
-                    +--------------+
-                    |    KID       |
-                    +--------------+
-                    |              |
-                    | CipherText   |
-                    |              |
-                    +--------------+
+        |                  |                |
+        |                  |                |
+        |                  |                |
+        |                  |                |
+        |                  | FullTrackName  |
++----------------+         | (from          |
+|    GroupId     |         | track_alias)   |
++----------------+         |                |
+|  Object ID     |         |                |
++----------------+         |                |
+|        |             +------------+       |               
+|<-------|-----------  |    KID     |       | Object
+|        |<------------|            |       | Payload
+|        |             +------------+       |
+|        |  secobj_salt      |              |
+|        |                   |              |
+|        |                   |              |
+|        v                   | secobj_key   |
+|  +-----------+             |              |
+|  |  NONCE    |             |              |
+|  +-----------+             |              |
+|        |                   |              |
+|        |                   v              |
+|        |           +--------------+       |
+|        |           |              |       |
+|        +---------->| AEAD.Encrypt |<------+
++------------------->|              |
+    AAD              +-------+------+
+                             |
+                             |
+                             v
+                     +--------------+
+                     |    KID       |
+                     +--------------+
+                     |              |
+                     | CipherText   |
+                     |              |
+                     +--------------+
 
-                    SecObj CipherText
-
+                     SecObj CipherText
 
 ~~~~~
 {: title="Encrypting a MOQT Object Ciphertext" }
@@ -396,24 +351,20 @@ def encrypt(Nonce, KID, envelope, plaintext):
 ### Decryption
 
 For decrypting, the KID field in the SecObj header is used to find the
-right key and salt for the encrypted object, and the Nonce field is obtained
+right key and salt for the encrypted object, and the nonce field is obtained
 from the `GroupId` and `Object` fields of the MOQT object envelope. The
 decryption procedure is as follows:
 
-~~~~~
-def decrypt(Nonce, secobj_ciphertext):
-  KID, ciphertext, GroupID, ObjectID = parse_ciphertext(secobj_ciphertext)
+1. Parse the SecureObject to obtain KID from the SecObj header, the ciphertext corresponding to the MOQT object payload and Group and ObjectId from the MOQT object envelope.
 
-  secobj_key, secobj_salt = key_store[KID]
+2. Retrieve the `secobj_key` and `secobj_salt` matching the KID.
 
-  nonce = xor(secobj_salt, encode_big_endian( GroupID | ObjectID  )
+3. Form the nonce by XORing secobj_salt, the bits from `GroupID | ObjectId` encoded as big-endian integer.
 
-  aad = secobj_header  | GroupID | ObjectID
 
-  payload = AEAD.Decrypt(secobj_key, nonce, aad, ciphertext)
+4. From the aad input by bitwse concatenating SecObj header with the Group and the ObjectId fields.
 
-  return MoQ_payload
-~~~~~
+Apply the decryption function with secobj_key, nonce, add and ciphertext as inputs.
 
 If a ciphertext fails to decrypt because there is no key available for the KID
 in the SecObj header, the client MAY buffer the ciphertext and retry decryption
@@ -422,57 +373,59 @@ other reason, the client MUST discard the ciphertext. Invalid ciphertext SHOULD 
 discarded in a way that is indistinguishable (to an external observer) from having
 processed a valid ciphertext.
 
+Below figure depicts the decryption process.
 ~~~~~
 
 
                                     SecObj CipherText
 
-                                   +--------------+
-                                   |    KID       |
-                                   +--------------+
-                                   |              |
-        +------------------------- | CipherText   |
-        |                  +------ |              |
-        |                  |       +--------------+
-        |                  |               |
-        |                  |               |
-        |                  |               |
-        |                  |               |
-        |                  |               |
-        v                  |               |
-+----------------+         | KID           |
-|    GroupId     |         |               |
-+----------------+         |               |
-|  Object ID     |         |               |
-+----------------+         |               |
-        |                  v               |
-        |             +------------+       |
-        |<------------|    KID     |       |
-        |              ------------+       |
-        |  secobj_salt      |              |
-        |                   |              |
-        |                   |              |
-        v                   | secobj_key   |
-  +-----------+             |              |
-  |  NONCE    |             |              |
-  +-----------+             |              |
-        |                   |              |
-        |                   v              |
-        |           +--------------+       |
-        |           |              |       |
-        +---------->| AEAD.Decrypt |<------+
-                    |              |
-                    +-------+------+
-                            |
-                            |
-                            |
-                            v
-                    +----------------+
-                    |                |
-                    |      MOQ       |
-                    |     Object     |
-                    |                |
-                    +----------------+
+                                    +--------------+
++-----------------------------------|    KID       |
+|                                   +--------------+
+|                                   |              |
+|          +------------------------| CipherText   |
+|          |                  +-----|              |
+|          |                  |     +--------------+
+|          |                  |              |
+|          |                  |              |
+|          |                  |              |
+|          |                  |              |
+|          |                  |              |
+|          v                  |              |
+|  +----------------+         | KID          |
+|  |    GroupId     |         |              |
+|  +----------------+         |              |
+|  |  Object ID     |         |              |
+|  +----------------+         |              |
+|  |      |                    v             |
+|  |      |               +------------+     |
+|  |      |<--------------|  KeyStore  |     | ciphertext
+|  |      |               +------------+     |
+|  |      |  secobj_salt        |            |
+|  |      |                     |            |
+|  |      |                     |            |
+|  |      v                     | secobj_key |
+|  | +-----------+              |            |
+|  | |  NONCE    |              |            |
+|  | +-----------+              |            |
+|  |      |                     |            |
+|  |      |                     v            |
+|  |      |             +--------------+     |
+|  |      |             |              |     |
+|  |      +------------>| AEAD.Decrypt |<------+
+|  +------------------->|              |
+|          ^   AAD      |              |
+|          |            +-------+------+
++----------+                   |
+                               |
+                               |
+                               v
+                      +----------------+
+                      |                |
+                      |      MOQ       |
+                      |     Object     |
+                      |                |
+                      +----------------+
 
 ~~~~~
 {: title="Decrypting an MOQT Object Ciphertext" }
@@ -485,7 +438,7 @@ TODO
 
 # IANA Considerations
 
-## SecObj Cipher Suites
+## SecObj Cipher Suites {#cipher-suites}
 
 This registry lists identifiers for SecObj cipher suites, as defined in
 cipher-suites.  The cipher suite field is two bytes wide, so the valid
@@ -504,7 +457,6 @@ Template:
 * Usage: Optional, Recommended, or Prohibited
 
 * Reference: The document where this wire format is defined
-
 
 
 Initial contents:
