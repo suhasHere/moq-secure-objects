@@ -107,7 +107,7 @@ Producer:
 Consumer:
 : Software that decrypts MoQ Objects.
 
-# MOQT Object Model Recap
+# MOQT Object Model Recap {#moqt}
 
 MOQT defines a publish/subscribe based media delivery protocol, where in
 endpoints, called producers, publish objects which are delivered via
@@ -202,7 +202,7 @@ One of the ways system keep the object names unique is by using a fully
 qualified domain names or UUIDs as part of the TrackNamespace.
 
 
-# Secure Object
+# Secure Object {#sec-obj}
 
 This document defines an encryption mechanism, called Secure
 Object(SecObj), that provides effective E2EE protection with a minimal
@@ -231,7 +231,7 @@ Object.  The header consists of a variable length encoded integer called
 KID.
 
 
-## Keys, Salts, and Nonces
+# Keys, Salts, and Nonces
 
 When encrypting objects within a MOQT Track, there is one secret called
 `track_base_key` per `FullTrackName` on which is premised the encryption
@@ -256,11 +256,11 @@ unless it can be ensured that nonce isn't reused.  Sine such reuse would
 result in multiple encrypted objects being generated with the same (key,
 nonce) pair, which harms the protections provided by many AEAD
 algorithms.  MoQ does not allow two different objects to have the same
-FullObjectName so the way the nonce is generated ( see section TODO )
-protects against NONCE reuse. Implementations SHOULD mark each key as
+FullObjectName so the way the nonce is generated ( see section {{nonce}} )
+protects against nonce reuse. Implementations SHOULD mark each key as
 usable for encryption or decryption.
 
-## Key Derivation {#key-derivation}
+## Key Derivation {#keys}
 
 Secobj encryption and decryption use a key and salt derived from the
 `track_base_key` associated to a KID.  Given a `track_base_key` value
@@ -289,13 +289,9 @@ In the above derivation :
 
 The hash function used for HKDF is determined by the cipher suite in use.
 
-## Encryption
+## Nonce Creation {#nonce}
 
-The key for encrypting MOQT objects from a given track is the
-`secobj_key` derived from the track_base_key {{key-derivation}}
-corresponding to the track.
-
-The Nonce is formed by XORing the `secobj_salt` {{key-derivation}} with
+The Nonce is formed by XORing the `secobj_salt` {{keys}} with
 bits from the GroupId | ObjectId, where both the GroupId and ObjectId
 are treated as 48 bit big-endian integer. Both the ObjectID and GroupID
 MUST be less than 2^48-1. The N_MIN from the AEAD cipher MUST be at
@@ -303,11 +299,23 @@ least 12 to have space for the object and group IDs to fit in the
 nonce. Note that the size of the nonce is defined by the underlying AEAD
 algorithm in use but for the algorithm referenced here, it is 12 octets.
 
-The encryptor forms an SecObj header using the KID value provided.
+## Additional Authenticated Data {#aad}
 
-The AAD data is formed by concatinating the SecObj Header, GroupID, and
-ObjectID.  The payload field from the MOQT object is used by the AEAD
+The additional authenticated data (AAD) is formed by concatinating the
+KID, GroupID, and ObjectID where each of these is encoded as a big
+endian 64 bit integer.
+
+
+# Encryption {#enbcrypt}
+
+The key for encrypting MOQT objects from a given track is the
+`secobj_key` derived from the track_base_key {{keys}}
+corresponding to the track.
+
+The payload field from the MOQT object is used by the AEAD
 algorithm for the plaintext.
+
+The encryptor forms an SecObj header using the KID value provided.
 
 The final SecureObject is formed from the SecObject Header, follow by the
 MOQT transport headers, followed by the output of the encryption.
@@ -366,7 +374,7 @@ Below figure depicts the encryption process described
 ~~~~~
 {: title="Encrypting a MOQT Object Ciphertext" }
 
-## Decryption
+# Decryption {#decrypt}
 
 For decrypting, the KID field in the SecObj header is used to find the
 right key and salt for the encrypted object, and the nonce field is
@@ -456,11 +464,11 @@ Below figure depicts the decryption process:
 
 
 
-# Security Considerations
+# Security Considerations {#security}
 
 TODO
 
-# IANA Considerations
+# IANA Considerations {#iana}
 
 ## SecObj Cipher Suites {#cipher-suites}
 
