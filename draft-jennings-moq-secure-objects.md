@@ -319,7 +319,7 @@ The encryptor forms an SecObj header using the KID value provided.
 
 The encryption procedure is as follows:
 
-1. From the MoqObject to obtain MOQT object payload as the plaintext to
+1. From the MOQT Object obtain MOQT object payload as the plaintext to
    encrypt. Get the GroupId and ObjectId from the MOQT object envelope.
 
 2. Retrieve the `secobj_key` and `secobj_salt` matching the KID.
@@ -336,7 +336,7 @@ the KID encdoded as QUIC variale length integer{{!RFC9000}}, followed by the out
 
 ~~~~
 +-----------------+------------------+-----------------+
-|    MOQT Object  |   SecObj Header  |     SecObject   |
+|    MOQT Object  |   SecObj Header  |     SecObj      |
 |    Header       |     (KID)        |     Ciphertext  |
 +-----------------+------------------+-----------------+
 ~~~~
