@@ -4,7 +4,7 @@ This is the working area for the individual Internet-Draft, "MoQ Secure Objects"
 
 
 * [Editor's Copy](https://suhashere.github.io/moq-secure-objects/#go.draft-jennings-moq-secure-objects.html)
-* [Datatracker Page](https://datatracker.ietf.org/doc/draft-fluffy-moq-secure-objects)
+* [Datatracker Page](https://datatracker.ietf.org/doc/draft-jennings-moq-secure-objects)
 * [Individual Draft](https://datatracker.ietf.org/doc/html/draft-jennings-moq-secure-objects)
 * [Compare Editor's Copy to Individual Draft](https://suhashere.github.io/moq-secure-objects/#go.draft-jennings-moq-secure-objects.diff)
 
