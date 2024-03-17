@@ -252,7 +252,7 @@ out of scope of this specification.
 The producers and consumers need to agree on which key should be used
 for a given KID and the purpose of the key, encryption or decryption
 only. A given key MUST NOT be used for encryption by multiple senders
-unless it can be ensured that nonce isn't reused.  Sine such reuse would
+unless it can be ensured that nonce isn't reused.  Since such reuse would
 result in multiple encrypted objects being generated with the same (key,
 nonce) pair, which harms the protections provided by many AEAD
 algorithms.  MoQ does not allow two different objects to have the same
