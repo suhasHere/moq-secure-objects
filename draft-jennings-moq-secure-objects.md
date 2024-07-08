@@ -36,7 +36,6 @@ normative:
 
 informative:
 
-
 --- abstract
 
 This document describes an end-to-end authenticated encryption scheme for
@@ -66,9 +65,10 @@ store and forward functions.
 
 As such, two layers of security are required:
 
-- Hop-by-hop (HBH) security between two MOQT relays
+1. Hop-by-hop (HBH) security between two MOQT relays
 
-- End-to-end (E2E) security from the sender of an MOQT object to receivers
+2. End-to-end (E2E) security from the Publisher of an MOQT object to End
+   Subscribers
 
 The HBH security is provided by TLS in the QUIC connection that MOQT
 runs over. MOQT support different E2EE protection as well as allowing
@@ -171,6 +171,7 @@ For purposes of this specification, we define `FullTrackName` as :
 ~~~
 FullTrackName = TrackNamespace | TrackName
 ~~~
+
 where `|` representations concatenation of byte strings,
 
 and  `ObjectName` is combination of following properties:
@@ -198,24 +199,40 @@ encrypted and the whole message is authenticated by an authentication tag in the
 payload:
 
 ~~~ aasvg
-   OBJECT_STREAM Message {
- +-----------------------------------------+
- |   Subscribe ID (i)        authenticated |
- |   Track Alias (i)                       |
- |   Group ID (i)                          |
- |   Object ID (i)                         |
- |   Object Send Order (i)                 |
- |   Object Status (i)                     |
- | +-------------------------------------+ |
- | | Object Payload (..)       encrypted | |
- | +-------------------------------------+ |
- +-----------------------------------------+
-   }
+OBJECT_STREAM Message {
+  Subscribe ID (i),
+  Track Alias (i),
+  Group ID (i),             <-- authenticated
+  Object ID (i),            <-- authenticated
+  Object Send Order (i),
+  Object Status (i),
+  Object Payload (..),      <-- encrypted and authenticated
+}
 ~~~
 {: #fig-encrypted-object title="Security properties of a secure OBJECT_STREAM
 object.  Protection of an OBJECT_DATAGRAM message is analogous." }
 
-Specifically, the payload of a secure object comprises the "encrypted data" and
+~~~ aasvg
++-------------+-----------------------------------------+
+| KID (i) ... |                                         |
++-------------+                                         |
+|                                                       |
+|                                                       |
+|                                                       |
+|                                                       |
+|                   Encrypted Data                      |
+|                                                       |
+|                                                       |
+|                                                       |
+|                                                       |
++-------------------------------------------------------+
+|                 Authentication Tag                    |
++-------------------------------------------------------+
+~~~
+{: #fig-secure-object-payload title="The payload of a secure object" }
+
+Specifically, the payload of a secure object comprises a varint-encoded KID
+value, followed by  the "encrypted data" and
 "authentication tag" portions of an SFrame ciphertext object, as described in
 {{Section 4.2 of !I-D.ietf-sframe-enc}}.  That is, the secure object payload is
 an SFrame ciphertext without the SFrame Header.  Rather than transmitting the
@@ -225,10 +242,12 @@ in the object being protected, as described in {{mapping-between-sframe-and-moqt
 ## Setup Assumptions
 
 This scheme applies SFrame on a per-track basis.  We assume that the application
-assigns each track a unique secret value that is used as the `base_key` for
-SFrame, where this value is known only to authorized producer and consumers for
-a given track.  How these per-track secrets are established is outside the scope
-of this specification.
+assigns each track a set of (KID, `base_key`) tuples, where each `base_key` is
+known only to authorized producer and consumers for a given track. How these
+per-track secrets are established is outside the scope of this specification. We
+also assume that the application defines which KID should be used for a given
+encryption operation.  (For decryption, the KID is obtained from the object
+payload.)
 
 It is also up to the application to specify the ciphersuite to be used for each
 track's SFrame context.  Any SFrame ciphersuite can be used. 
@@ -258,7 +277,7 @@ header) and metadata.
 
 ~~~ aasvg
 +-+----+-+----+--------------------+--------------------+
-|K|KLEN|C|CLEN|     Key ID = 0     | Counter = Grp+Obj  | <---- Synthesized
+|K|KLEN|C|CLEN|    Key ID = App    | Counter = Grp+Obj  | <---- Synthesized
 +-+----+-+----+--------------------+--------------------+ -.
 |                                                       |   |
 |                                                       |   |
@@ -276,24 +295,39 @@ header) and metadata.
 {: #fig-sframe-ciphertext title="An SFrame, as it relates to MOQT" }
 
 For protect/unprotect of MOQT objects, the KID, CTR and metadata fields are
-computed from the MOQT object:
+constructed as follows:
 
-* `KID = 0`
-* `CTR = (group_id << 32) | (object_id & 0xFFFFFFFF)`
-* `metadata = subscribe_id || ... || object_status` (i.e., the entirety of the
-  message aside from the payload)
+* The KID value is provided by the application, as discussed in
+  {{setup-assumptions}}.
 
-In order for this mapping to be one-to-one (which is required to avoid nonce
-reuse), both the Group ID and Object ID fields in the MOQT object MUST be less
-than 2<sup>32</sup>.
+* The CTR value comprises the encoding of Group ID and Object ID as QUIC
+  varints, padded to 8 bytes on the right, interpreted as a 64-bit big-endian
+  integer. (Note that this implies that the total bit length of the encoded
+  Group ID and Object ID MUST be less than 64).
 
-> **NOTE:** If this limitation is uncomfortable, it can be mitigated in a few
-> ways, for example:
-> * having a key management scheme that allows for a track to be re-keyed
-> * Allowing the Group ID and Object ID subfields of the CTR value to have
->   different sizes, so that for example an audio stream could have 0 object ID
->   bits (thus requiring the object ID to always be zero) and 64 bits of group
->   ID.
+``` python
+def encode_varint(x):
+    if x < 0x40:
+        return (x, 8)
+    elif x < 0x4000:
+        return (0x4000 + x, 16)
+    elif x < 0x40000000:
+        return (0x80000000 + x, 32)
+    elif x < 0x4000000000000000:
+        return (0xc000000000000000 + x, 64)
+
+def encode_ctr(group_id, object_id):
+    (group_id, group_bits) = encode_varint(group_id)
+    (object_id, object_bits) = encode_varint(object_id)
+    
+    group_shift = 64 - group_bits
+    object_shift = group_shift - object_bits
+    
+    return (group_id << group_shift) | (object_id << object_shift)
+```
+
+* The `metadata` field is the FullTrackName value for the track within which the
+  object is being sent.
 
 ## Protect
 
@@ -304,13 +338,13 @@ reconstructed by the other side).
 1. Select the appropriate SFrame context for the track (see
    {{setup-assumptions}}).
 
-2. Compute the KID, CTR, and metadata values for the object (see
+2. Compute the CTR, and metadata values for the object (see
    {{mapping-between-sframe-and-moqt}}).
 
-3. Perform an SFrame encryption with the computed KID, CTR, and metadata values,
-   and the plaintext parameter set to the payload of the MOQT object (as
-   described in {{Section 4.4.3 of I-D.ietf-sframe-enc}}), returning an SFrame
-   ciphertext object.
+3. Perform an SFrame encryption with the KID value provided by the application,
+   the computed CTR and metadata values, and the plaintext parameter set to the
+   payload of the MOQT object (as described in {{Section 4.4.3 of
+   I-D.ietf-sframe-enc}}), returning an SFrame ciphertext object.
 
 4. Construct an MOQT secure object of the same type as the input object, with
    the following context:
@@ -324,21 +358,21 @@ computed by parsing the "config byte" which is the first byte of the SFrame
 ciphertext.
 
 ~~~ pseudocode
-def moqt_protect(full_track_name, object):
+def moqt_protect(full_track_name, kid, object):
     # Idenitfy the appropriate SFrame context
     ctx = sframe_context_for_track(full_track_name)
     
     # Compute the required SFrame parameters
-    kid = 0
-    ctr = (object.group_id << 32) | (object.object_id & 0xffffffff)
-    metadata = concat(object.subscribe_id, ..., object.object_status)
+    ctr = encode_ctr(object.group_id, object.object_id)
+    metadata = full_track_name
 
     # Perform an SFrame encryption
     sframe_ciphertext = ctx.encrypt(kid, ctr, metadata, object.payload)
 
     # Replace the object's payload with the encrypted data
+    (encoded_kid, _) = encode_varint(kid)
     ciphertext_offset = sframe_header_len(sframe_ciphertext[0])
-    object.payload = sframe_ciphertext[ciphertext_offset:]
+    object.payload = encoded_kid + sframe_ciphertext[ciphertext_offset:]
 ~~~
 
 ## Decryption
@@ -350,19 +384,24 @@ decrypt it to obtain the payload for the MOQT object.
 1. Select the appropriate SFrame context for the track (see
    {{setup-assumptions}}).
 
-2. Compute the KID, CTR, and metadata values for the object (see
+2. Compute the CTR and metadata values for the object (see
    {{mapping-between-sframe-and-moqt}}).
 
-3. Construct an SFrame ciphertext:
-    * Construct an SFrame header value that represents the computed KID and CTR
-      values, as defined in {{Section 4.3 of I-D.ietf-sframe-enc}}.
-    * Append to the SFrame header the payload of the MOQT secure object.
+3. Parse the payload of the MOQT secure object to obtain:
+    a. The KID value
+    b. The SFrame ciphertext data
 
-4. Perform an SFrame decryption with the SFrame ciphertext and the computed
+4. Construct an SFrame ciphertext:
+    * Construct an SFrame header value that represents KID and CTR
+      values, as defined in {{Section 4.3 of I-D.ietf-sframe-enc}}.
+    * Append to the SFrame header the SFrame ciphertext data parsed from the
+      object payload.
+
+5. Perform an SFrame decryption with the SFrame ciphertext and the computed
    metadata as input, as described in {{Section 4.4.4 of I-D.ietf-sframe-enc}},
    returning a plaintext value.
 
-4. Construct an MOQT object of the same type as the input object, with
+6. Construct an MOQT object of the same type as the input object, with
    the following context:
     * Set the payload to the plaintext value returned by SFrame decryption.
     * Set the other fields of the message to the corresponding fields from the
@@ -373,16 +412,19 @@ def moqt_unprotect(full_track_name, object):
     # Idenitfy the appropriate SFrame context
     ctx = sframe_context_for_track(full_track_name)
     
+    # Parse the object payload
+    (kid, kid_byte_len) = parse_varint(object.payload)
+    sframe_ciphertext_data = object.payload[kid_byte_len:]
+
     # Compute the required SFrame parameters
-    kid = 0
-    ctr = (object.group_id << 32) | (object.object_id & 0xffffffff)
-    metadata = concat(object.subscribe_id, ..., object.object_status)
+    ctr = encode_ctr(object.group_id, object.object_id)
+    metadata = full_track_name
 
     # Synthesize an SFrame ciphertext
     header = encode_sframe_header(kid, ctr)
-    sframe_ciphertext = concat(header, object.payload)
+    sframe_ciphertext = concat(header, sframe_ciphertext_data)
 
-    # Perform an SFrame encryption
+    # Perform an SFrame decryption
     plaintext = ctx.decrypt(metadata, sframe_ciphertext)
 
     # Replace the object's payload with the decrypted data
