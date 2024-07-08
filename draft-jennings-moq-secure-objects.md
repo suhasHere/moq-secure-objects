@@ -1,6 +1,6 @@
 ---
-title: Secure Objects for Media over QUIC
-abbrev: SecureObject
+title: End-to-End Secure Objects for Media over QUIC Transport
+abbrev: MOQT Secure Objects
 docname: draft-jennings-moq-secure-objects-latest
 category: std
 
@@ -19,15 +19,17 @@ venue:
 
 author:
  -
-    ins: C. Jennings
     name: Cullen Jennings
     organization: Cisco
     email: fluffy@cisco.com
  -
-    ins: S. Nandakumar
     name: Suhas Nandakumar
     organization: Cisco
     email: snandaku@cisco.com
+ -
+    name: Richard Barnes
+    organization: Cisco
+    email: rlb@ipv.sx
 
 
 normative:
@@ -37,49 +39,51 @@ informative:
 
 --- abstract
 
-This document describes end-to-end encryption and authentication
-mechanism for application objects intended to be delivered over Media
-over QUIC Transport (MOQT).
+This document describes an end-to-end authenticated encryption scheme for
+application objects intended to be delivered over Media over QUIC Transport
+(MOQT).  We reuse the SFrame scheme for authenticated encryption of media
+objects, while suppressing data that would be redundant between SFrame and MOQT,
+for an efficient on-the-wire representation.
 
 --- middle
 
-
 # Introduction
 
-Media Over QUIC Transport (MOQT) is a protocol that is optimized for the
-QUIC protocol, either directly or via WebTransport, for the
-dissemination of delivery of low latency media. MOQT defines a
-publish/subscribe media delivery layer across set of participating
-relays for supporting wide range of use-cases with different resiliency
-and latency (live, interactive) needs without compromising the
-scalability and cost effectiveness associated with content delivery
-networks. It supports sending media objects through sets of relays
-nodes.
+Media Over QUIC Transport (MOQT) is a protocol that is optimized for the QUIC
+protocol, either directly or via WebTransport, for the dissemination of delivery
+of low latency media {{!I-D.ietf-moq-transport}}. MOQT defines a
+publish/subscribe media delivery layer across set of participating relays for
+supporting wide range of use-cases with different resiliency and latency (live,
+interactive) needs without compromising the scalability and cost effectiveness
+associated with content delivery networks. It supports sending media objects
+through sets of relays nodes.
 
-Typically a MOQ Relay doesn't need to access the media content, thus
-allowing for the media to be "end-to-end" encrypted so that it cannot be
-decrypted by the relays. However for the relays to participate
-effectively in the media delivery, it needs to able to access naming
-information of a MOQT object to carryout the required store and forward
-functions.
+Typically a MOQ Relay doesn't need to access the media content, thus allowing
+the media to be "end-to-end" encrypted so that it cannot be decrypted by the
+relays. However for a relay to participate effectively in the media delivery, it
+needs to  access naming information of a MOQT object to carryout the required
+store and forward functions.
 
-As such, two layers of encryption and authentication are required:
+As such, two layers of security are required:
 
-- Hop-by-hop (HBH) encryption achieved through QUIC connection per hop
-  and
+- Hop-by-hop (HBH) security between two MOQT relays
 
-- End-to-end (E2E) encryption (E2EE) of media between the endpoints.
+- End-to-end (E2E) security from the sender of an MOQT object to receivers
 
-The HBH security is provided by TLS in the QUIC connection that MoQT
-runs over. MoQT support different E2EE protection as well as allowing
+The HBH security is provided by TLS in the QUIC connection that MOQT
+runs over. MOQT support different E2EE protection as well as allowing
 for E2EE security.
 
-A goal of the design is to minimize the amount of additional data the
-encryptions requires for each object. This is particularly important for
-very low bit rate audio applications where the encryption overhead can
-become a significant portion of the total bandwidth.
+This document defines a scheme for E2E authenticated encryption of MOQT objects.
+This scheme is based on the SFrame mechanism for authenticated encryption of
+media objects {{!I-D.ietf-sframe-enc}}.
 
-This document defines an E2EE protection scheme known as Secure Object.
+However, a secondary goal of this design is to minimize the amount of additional
+data the encryptions requires for each object. This is particularly important
+for very low bit rate audio applications where the encryption overhead can
+increase overall bandwidth usage by a significant percentage.  To minimize the
+overhead added by end-to-end encryption, certain fields that would be redundant
+between MOQT and SFrame are not transmitted.
 
 # Terminology
 
@@ -89,11 +93,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
 {{!RFC2119}} {{!RFC8174}} when, and only when, they appear in all
 capitals, as shown here.
 
-IV:
-: Initialization Vector
-
-MAC:
-: Message Authentication Code
+This document re
 
 E2EE:
 : End to End Encryption
@@ -113,7 +113,7 @@ MOQT defines a publish/subscribe based media delivery protocol, where in
 endpoints, called producers, publish objects which are delivered via
 participating relays to receiving endpoints, called consumers.
 
-Section 2 of MoQ Transport defines hierarchical object model for
+{{Section 2 of I-D.ietf-moq-transport}} defines hierarchical object model for
 application data, comprised of objects, groups and tracks.
 
 Objects defines the basic data element, an addressable unit whose
@@ -122,48 +122,38 @@ ordering and potential dependencies. A track contains a sequence of
 groups and serves as the entity against which a consumer issues a
 subscription request.
 
-~~~~~
-  Media Over QUIC Application
-
-
-          |                                                       time
-          |
- TrackA   +-+---------+-----+---------+--------------+---------+---->
-          | | Group1  |     | Group2  |  . . . . . . | GroupN  |
-          | +----+----+     +----+----+              +---------+
-          |      |               |
-          |      |               |
-          | +----+----+     +----+----+
-          | | Object0 |     | Object0 |
-          | +---------+     +---------+
-          | | Object1 |     | Object1 |
-          | +---------+     +---------+
-          | | Object2 |     | Object2 |
-          | +---------+     +---------+
-          |      .
-          |      .
-          |      .
-          | +---------+
-          | | ObjectN |
-          | +---------+
-          |
-          |
-          |
-          |                                                       time
-          |
- TrackB   +-+---------+-----+---------+--------------+---------+---->
-          | | Group1  |     | Group2  | . . .. .. .. | GroupN  |
-          | +---+-----+     +----+----+              +----+----+
-          |     |                |                        |
-          |     |                |                        |
-          |+----+----+      +----+----+              +----+----+
-          || Object0 |      | Object0 |              | Object0 |
-          |+---------+      +---------+              +---------+
-          |
-          v
-
-
-~~~~~
+~~~ aasvg
+Media Over QUIC Application
+|
+|                                                           time
++-- TrackA --+---------+-----+---------+-------+---------+------>
+|            | Group1  |     | Group2  |  ...  | GroupN  |
+|            +----+----+     +----+----+       +---------+
+|                 |               |
+|                 |               |
+|            +----+----+     +----+----+
+|            | Object0 |     | Object0 |
+|            +---------+     +---------+
+|            | Object1 |     | Object1 |
+|            +---------+     +---------+
+|            | Object2 |     | Object2 |
+|            +---------+     +---------+
+|                ...
+|            +---------+
+|            | ObjectN |
+|            +---------+
+|
+|                                                          time
++-- TrackB --+---------+-----+---------+-------+---------+------>
+             | Group1  |     | Group2  |  ...  | GroupN  |
+             +----+----+     +----+----+       +----+----+
+                  |               |                 |
+                  |               |                 |
+             +----+----+     +----+----+       +----+----+
+             | Object0 |     | Object0 |       | Object0 |
+             +---------+     +---------+       +---------+
+~~~
+{: #fig-moqt-session title="Structure of an MOQT session" }
 
 Objects are comprised of two parts: envelope and a payload. The envelope
 is never end to end encrypted and is always visible to relays. The
@@ -171,8 +161,8 @@ payload portion may be end to end encrypted, in which case it is only
 visible to the producer and consumer. The application is solely
 responsible for the content of the object payload.
 
-Tracks are identified by a combination of its `TrackNamespace ` and
-`TrackName`.  TrackNamespace and TrackName are treated as a sequence of
+Tracks are identified by a combination of its TrackNamespace and
+TrackName.  TrackNamespace and TrackName are treated as a sequence of
 binary bytes.  Group and Objects are represented as variable length
 integers called GroupId and ObjectId respectively.
 
@@ -181,14 +171,13 @@ For purposes of this specification, we define `FullTrackName` as :
 ~~~
 FullTrackName = TrackNamespace | TrackName
 ~~~
-where '|' representations concatenation of byte strings,
+where `|` representations concatenation of byte strings,
 
 and  `ObjectName` is combination of following properties:
 
 ~~~
 ObjectName = (FullTrackName, GroupId, ObjectId)
 ~~~
-
 
 Two important properties of objects are:
 
@@ -201,326 +190,248 @@ name but different data.
 One of the ways system keep the object names unique is by using a fully
 qualified domain names or UUIDs as part of the TrackNamespace.
 
-
-# Secure Object {#sec-obj}
-
-This document defines an protection mechanism, called Secure
-Object(SecObj), that provides effective E2EE protection with a minimal
-encryption bandwidth overhead.
-
-SecObj encryption uses an AEAD function {{!RFC5116}} defined by the
-cipher suite in use (see {{cipher-suites}}).
-
-We will refer to the following aspects of the AEAD algorithm below:
-
-AEAD.Encrypt and AEAD.Decrypt - The encryption and decryption functions
-for the AEAD.
-
-AEAD_KEY_SIZE: The size in bytes of a key for the encryption algorithm
-
-AEAD_NONCE_SIZE: The size in bytes of a nonce for the encryption
-algorithm
-
-AEAD_TAG_SIZE: The overhead in bytes of the encryption algorithm
-          (typically the size of a "tag" that is added to the plaintext)
-
-
-An SecObj cipher text comprises an header, followed by output of an AEAD
-encryption of the plaintext {{!RFC5116}} corresponding to the MOQT
-Object.  The header consists of a variable length encoded integer called
-KID.
-
-
-# Keys, Salts, and Nonces
-
-When encrypting objects within a MOQT Track, there is one secret called
-`track_base_key` per `FullTrackName` on which is premised the encryption
-or decryption operations for the objects within that track.
-
-In MoQ, for some use cases, like streaming a video clip, all the objects
-in a track will often be encrypted with the same base key for that
-track.  However in other uses cases, like a conference call, the keys
-may change as the participants of the conference come and go. For this
-type of scenario, different object in the same track will end up being
-protected with different base keys. Each encrypted object also carries
-an unencrypted "Key Identifier (KID)" which is a small integer that
-identifies, within the scope of this track, the base key being used to
-encrypt the object. The actual keys for each KID and FullTrackName are
-exchanged between the devices encrypting and decrypting in ways that are
-out of scope of this specification.
-
-The producers and consumers need to agree on which key should be used
-for a given KID and the purpose of the key, encryption or decryption
-only. A given key MUST NOT be used for encryption by multiple senders
-unless it can be ensured that nonce isn't reused.  Since such reuse would
-result in multiple encrypted objects being generated with the same (key,
-nonce) pair, which harms the protections provided by many AEAD
-algorithms.  MoQ does not allow two different objects to have the same
-FullObjectName, so the way the nonce is generated ( see section {{nonce}} )
-protects against nonce reuse. Implementations SHOULD mark each key as
-usable for encryption or decryption.
-
-## Key Derivation {#keys}
-
-Secobj encryption and decryption use a key and salt derived from the
-`track_base_key` associated to a KID.  Given a `track_base_key` value
-for a `FullTrackName` the key and salt are derived using HKDF
-{{!RFC5869}} as follows:
-
-~~~~~
-  secobj_label = "SecObj 1.0"
-  secobj_secret = HKDF-Extract(secobj_label, track_base_key)
-
-  secobj_key_label = "SecObj 1.0 Secret key" | KID | cipher_suite | FullTrackName
-  secobj_key = HKDF-Expand(secobj_secret, secobj_key_label, AEAD_KEY_SIZE)
-
-  secobj_salt_label = "SecObj 1.0 Secret salt" | KID | cipher_suite
-  secobj_salt = HKDF-Expand(secobj_secret, secobj_salt_label, AEAD_NONCE_SIZE)
-~~~~~
-
-In the above derivation :
-
-* The `|` operator represents concatenation of byte strings.
-
-* The `cipher_suite` value is a 16 bit big-endian integer representing the
-  cipher suite in use (see cipher-suites).
-
-* The KID is a 64 bit big-endian integer.
-
-The hash function used for HKDF is determined by the cipher suite in use.
-
-## Nonce Creation {#nonce}
-
-The Nonce is formed by XORing the `secobj_salt` {{keys}} with bits from
-the concatenating the GroupId and ObjectId, where both the GroupId and
-ObjectId are treated as 48 bit big-endian integer. Both the ObjectID and
-GroupID MUST be less than 2^48-1. The N_MIN from the AEAD cipher MUST be
-at least 12 to have space for the object and group IDs to fit in the
-nonce. Note that the size of the nonce is defined by the underlying AEAD
-algorithm in use but for the algorithm referenced here, it is 12 octets.
-
-## Additional Authenticated Data {#aad}
-
-The additional authenticated data (AAD) is formed by concatinating the
-KID, GroupID, and ObjectID where each of these is encoded as a
-big-endian 64 bit integer.
-
-
-# Encryption {#encrypt}
-
-The key for encrypting MOQT objects from a given track is the
-`secobj_key` derived from the track_base_key {{keys}}
-corresponding to the track.
-
-The payload field from the MOQT object is used by the AEAD
-algorithm for the plaintext.
-
-The encryptor forms an SecObj header using the KID value provided.
-
-The encryption procedure is as follows:
-
-1. From the MOQT Object obtain MOQT object payload as the plaintext to
-   encrypt. Get the GroupId and ObjectId from the MOQT object envelope.
-
-2. Retrieve the `secobj_key` and `secobj_salt` matching the KID.
-
-3. Form the nonce by as described in {{nonce}}.
-
-4. Form the aad input as described in {{aad}}.
-
-5. Apply the AEAD encryption function with secobj_key, nonce, aad and
-   ciphertext as inputs.
-
-The final SecureObject is formed from the MOQT transport headers, then
-the KID encdoded as QUIC variale length integer{{!RFC9000}}, followed by the output of the encryption
-
-~~~~
-+-----------------+------------------+-----------------+
-|    MOQT Object  |   SecObj Header  |     SecObj      |
-|    Header       |     (KID)        |     Ciphertext  |
-+-----------------+------------------+-----------------+
-~~~~
-
-Below figure depicts the encryption process described
-
-~~~~~
-
-                                  +----------------+
-                                  |                |
-        +-------------------------|      MOQT      |
-        |                  +------|     Object     |
-        |                  |      |                |
-        |                  |      +--------+-------+
-        |                  |                |
-        |                  |                |
-        |                  |                |
-        |                  |                |
-        |                  | FullTrackName  |
-+----------------+         | (from          |
-|    GroupId     |         | track_alias)   |
-+----------------+         |                |
-|  Object ID     |         |                |
-+----------------+         |                |
-|        |             +------------+       |
-|<-------|-----------  |    KID     |       | Object
-|        |<------------|            |       | Payload
-|        |             +------------+       |
-|        |  secobj_salt      |              |
-|        |                   |              |
-|        |                   |              |
-|        v                   | secobj_key   |
-|  +-----------+             |              |
-|  |  NONCE    |             |              |
-|  +-----------+             |              |
-|        |                   |              |
-|        |                   v              |
-|        |           +--------------+       |
-|        |           |              |       |
-|        +---------->| AEAD.Encrypt |<------+
-+------------------->|              |
-    AAD              +-------+------+
-                             |
-                             |
-                             v
-                     +--------------+
-                     |    KID       |
-                     +--------------+
-                     |              |
-                     | CipherText   |
-                     |              |
-                     +--------------+
-
-                     SecObj CipherText
-
-~~~~~
-{: title="Encrypting a MOQT Object Ciphertext" }
-
-# Decryption {#decrypt}
-
-For decrypting, the KID field in the received data is used to find the
-right key and salt for the encrypted object, and the nonce field is
-obtained from the `GroupId` and `ObjectId` fields of the MOQT object
-envelope.
-
-The decryption procedure is as follows:
-
-1. Parse the SecureObject to obtain KID, the ciphertext corresponding
-   to MOQT object payload and the GroupID and ObjectId from the MOQT
-   object envelope.
-
-2. Retrieve the `secobj_key` and `secobj_salt` matching the KID.
-
-3. Form the nonce by as described in {{nonce}}.
-
-4. Form the aad input as described in {{aad}}.
-
-5. Apply the AEAD decryption function with secobj_key, nonce, aad and
-   ciphertext as inputs.
-
-If a ciphertext fails to decrypt because there is no key available for
-the KID in the SecObj header, the client MAY buffer the ciphertext and
-retry decryption once a key with that KID is received.  If a ciphertext
-fails to decrypt for any other reason, the client MUST discard the
-ciphertext. Invalid ciphertext SHOULD be discarded in a way that is
-indistinguishable (to an external observer) from having processed a
-valid ciphertext.
-
-Below figure depicts the decryption process:
-
-~~~~~
-
-
-                                    SecObj CipherText
-
-                                    +--------------+
-+-----------------------------------|    KID       |
-|                                   +--------------+
-|                                   |              |
-|          +------------------------| CipherText   |
-|          |                  +-----|              |
-|          |                  |     +--------------+
-|          |                  |              |
-|          |                  |              |
-|          |                  |              |
-|          |                  |              |
-|          |                  |              |
-|          v                  |              |
-|  +----------------+         | KID          |
-|  |    GroupId     |         |              |
-|  +----------------+         |              |
-|  |  Object ID     |         |              |
-|  +----------------+         |              |
-|  |      |                    v             |
-|  |      |               +------------+     |
-|  |      |<--------------|  KeyStore  |     | ciphertext
-|  |      |               +------------+     |
-|  |      |  secobj_salt        |            |
-|  |      |                     |            |
-|  |      |                     |            |
-|  |      v                     | secobj_key |
-|  | +-----------+              |            |
-|  | |  NONCE    |              |            |
-|  | +-----------+              |            |
-|  |      |                     |            |
-|  |      |                     v            |
-|  |      |             +--------------+     |
-|  |      |             |              |     |
-|  |      +------------>| AEAD.Decrypt |<------+
-|  +------------------->|              |
-|          ^   AAD      |              |
-|          |            +-------+------+
-+----------+                   |
-                               |
-                               |
-                               v
-                      +----------------+
-                      |                |
-                      |      MOQ       |
-                      |     Object     |
-                      |                |
-                      +----------------+
-
-~~~~~
-{: title="Decrypting an MOQT Object Ciphertext" }
-
-
+# Secure Objects
+
+A Secure MOQT Object is MOQT OBJECT_STREAM or OBJECT_DATAGRAM messages that has
+been protected with the scheme defined in this draft, so that its payload is
+encrypted and the whole message is authenticated by an authentication tag in the
+payload:
+
+~~~ aasvg
+   OBJECT_STREAM Message {
+ +-----------------------------------------+
+ |   Subscribe ID (i)        authenticated |
+ |   Track Alias (i)                       |
+ |   Group ID (i)                          |
+ |   Object ID (i)                         |
+ |   Object Send Order (i)                 |
+ |   Object Status (i)                     |
+ | +-------------------------------------+ |
+ | | Object Payload (..)       encrypted | |
+ | +-------------------------------------+ |
+ +-----------------------------------------+
+   }
+~~~
+{: #fig-encrypted-object title="Security properties of a secure OBJECT_STREAM
+object.  Protection of an OBJECT_DATAGRAM message is analogous." }
+
+Specifically, the payload of a secure object comprises the "encrypted data" and
+"authentication tag" portions of an SFrame ciphertext object, as described in
+{{Section 4.2 of !I-D.ietf-sframe-enc}}.  That is, the secure object payload is
+an SFrame ciphertext without the SFrame Header.  Rather than transmitting the
+SFrame Header, MOQT producers and consumers synthesize it from the information
+in the object being protected, as described in {{mapping-between-sframe-and-moqt}}.
+
+## Setup Assumptions
+
+This scheme applies SFrame on a per-track basis.  We assume that the application
+assigns each track a unique secret value that is used as the `base_key` for
+SFrame, where this value is known only to authorized producer and consumers for
+a given track.  How these per-track secrets are established is outside the scope
+of this specification.
+
+It is also up to the application to specify the ciphersuite to be used for each
+track's SFrame context.  Any SFrame ciphersuite can be used. 
+
+> **NOTE:** This is described as having a single key per track right now, for
+> simplicity.  It will likely be useful to have multiple keys per track, e.g.,
+> to accommodate a track spanning multiple MLS epochs.  You could also
+> accommodate multiple senders in the same track this way, though that seems
+> problematic for other reasons (namely object name uniqueness).  In any case,
+> these variants can be distinguished by KID, and the KID will have to be
+> carried in the protected object payload.
+
+> **NOTE:** You could also use the track names to derive keys off of a master
+> key, something like `track_base_key = HKDF(track_id, master_key)`.  This could
+> be useful, e.g., if the `master_key` is exported from MLS.  SFrame will also
+> derive different base keys for different KID values, so in principle, you
+> could use the KID to distinguish tracks.  But as discussed above, we probably
+> want to use the KID for other purposes.
+
+## Mapping Between SFrame and MOQT
+
+MOQT secure objects are protected and unprotected by means of the analogous
+SFrame operations.  SFrame the protect operation requires KID, CTR, and metadata
+inputs, and produces an SFrame ciphertext structure as output; the unprotect
+operation takes as input an SFrame ciphertext (including KID and CTR in a
+header) and metadata.
+
+~~~ aasvg
++-+----+-+----+--------------------+--------------------+
+|K|KLEN|C|CLEN|     Key ID = 0     | Counter = Grp+Obj  | <---- Synthesized
++-+----+-+----+--------------------+--------------------+ -.
+|                                                       |   |
+|                                                       |   |
+|                                                       |   |
+|                                                       |   |
+|                   Encrypted Data                      |   |
+|                                                       |   +-- MOQT Object
+|                                                       |   |   Payload
+|                                                       |   |
+|                                                       |   |
++-------------------------------------------------------+   |
+|                 Authentication Tag                    |   |
++-------------------------------------------------------+ -'
+~~~
+{: #fig-sframe-ciphertext title="An SFrame, as it relates to MOQT" }
+
+For protect/unprotect of MOQT objects, the KID, CTR and metadata fields are
+computed from the MOQT object:
+
+* `KID = 0`
+* `CTR = (group_id << 32) | (object_id & 0xFFFFFFFF)`
+* `metadata = subscribe_id || ... || object_status` (i.e., the entirety of the
+  message aside from the payload)
+
+In order for this mapping to be one-to-one (which is required to avoid nonce
+reuse), both the Group ID and Object ID fields in the MOQT object MUST be less
+than 2<sup>32</sup>.
+
+> **NOTE:** If this limitation is uncomfortable, it can be mitigated in a few
+> ways, for example:
+> * having a key management scheme that allows for a track to be re-keyed
+> * Allowing the Group ID and Object ID subfields of the CTR value to have
+>   different sizes, so that for example an audio stream could have 0 object ID
+>   bits (thus requiring the object ID to always be zero) and 64 bits of group
+>   ID.
+
+## Protect
+
+To construct an MOQT secure object from an unprotected MOQT object, we perform
+an SFrame encryption and then throw away the SFrame header (since it can be
+reconstructed by the other side).
+
+1. Select the appropriate SFrame context for the track (see
+   {{setup-assumptions}}).
+
+2. Compute the KID, CTR, and metadata values for the object (see
+   {{mapping-between-sframe-and-moqt}}).
+
+3. Perform an SFrame encryption with the computed KID, CTR, and metadata values,
+   and the plaintext parameter set to the payload of the MOQT object (as
+   described in {{Section 4.4.3 of I-D.ietf-sframe-enc}}), returning an SFrame
+   ciphertext object.
+
+4. Construct an MOQT secure object of the same type as the input object, with
+   the following context:
+    * Set the payload to the contents of the "encrypted data" and
+      "authentication tag" portion of the SFrame ciphertext.
+    * Set the other fields of the message to the corresponding fields from the
+      input message.
+
+Note that the offset of the required bytes in the SFrame ciphertext can be
+computed by parsing the "config byte" which is the first byte of the SFrame
+ciphertext.
+
+~~~ pseudocode
+def moqt_protect(full_track_name, object):
+    # Idenitfy the appropriate SFrame context
+    ctx = sframe_context_for_track(full_track_name)
+    
+    # Compute the required SFrame parameters
+    kid = 0
+    ctr = (object.group_id << 32) | (object.object_id & 0xffffffff)
+    metadata = concat(object.subscribe_id, ..., object.object_status)
+
+    # Perform an SFrame encryption
+    sframe_ciphertext = ctx.encrypt(kid, ctr, metadata, object.payload)
+
+    # Replace the object's payload with the encrypted data
+    ciphertext_offset = sframe_header_len(sframe_ciphertext[0])
+    object.payload = sframe_ciphertext[ciphertext_offset:]
+~~~
+
+## Decryption
+
+To transform an MOQT secure object back into its plaintext form, we first
+synthesize an SFrame ciphertext representing the encrypted payload, and then
+decrypt it to obtain the payload for the MOQT object.
+
+1. Select the appropriate SFrame context for the track (see
+   {{setup-assumptions}}).
+
+2. Compute the KID, CTR, and metadata values for the object (see
+   {{mapping-between-sframe-and-moqt}}).
+
+3. Construct an SFrame ciphertext:
+    * Construct an SFrame header value that represents the computed KID and CTR
+      values, as defined in {{Section 4.3 of I-D.ietf-sframe-enc}}.
+    * Append to the SFrame header the payload of the MOQT secure object.
+
+4. Perform an SFrame decryption with the SFrame ciphertext and the computed
+   metadata as input, as described in {{Section 4.4.4 of I-D.ietf-sframe-enc}},
+   returning a plaintext value.
+
+4. Construct an MOQT object of the same type as the input object, with
+   the following context:
+    * Set the payload to the plaintext value returned by SFrame decryption.
+    * Set the other fields of the message to the corresponding fields from the
+      input message.
+
+~~~ pseudocode
+def moqt_unprotect(full_track_name, object):
+    # Idenitfy the appropriate SFrame context
+    ctx = sframe_context_for_track(full_track_name)
+    
+    # Compute the required SFrame parameters
+    kid = 0
+    ctr = (object.group_id << 32) | (object.object_id & 0xffffffff)
+    metadata = concat(object.subscribe_id, ..., object.object_status)
+
+    # Synthesize an SFrame ciphertext
+    header = encode_sframe_header(kid, ctr)
+    sframe_ciphertext = concat(header, object.payload)
+
+    # Perform an SFrame encryption
+    plaintext = ctx.decrypt(metadata, sframe_ciphertext)
+
+    # Replace the object's payload with the decrypted data
+    object.payload = plaintext
+~~~
 
 # Security Considerations {#security}
 
-TODO
+The SFrame specification lists several things that an application needs to
+account for in order to use SFrame securely, which are all accounted for here:
+
+1. **Header value uniqueness:** Uniqueness of SFrame CTR values follows from the
+   uniqueness of MOQT (group ID, object ID) pairs.  We only use one KID value,
+   but instead use distinct SFrame contexts with distinct keys per track.  This
+   assures that the same (`base_key`, KID, CTR) tuple is never used twice.
+
+2. **Key management:** We delegate this to the MOQT application, with subject to
+   the assumptions described in {{setup-assumptions}}.
+
+3. **Anti-replay:** Replay is not possible within the MOQT framework because of
+   the uniqueness constraints on object IDs and objects, and because the group
+   ID and object ID are cryptographically bound to the secure object payload.
+
+4. **Metadata:** The content of the metadata input to SFrame operations is
+   defined in {{mapping-between-sframe-and-moqt}}.
+
+> **NOTE:** It is not clear to me that the anti-replay point actually holds up
+> here, but that is probably just due to the limitations of my understanding of
+> MOQT.  How is a receiver or relay supposed to be have if its next upstream hop
+> sends it multiple values with the same track name, group ID, and object ID?
+
+Any of the SFrame ciphersuites defined in the relevant IANA registry can be used
+to protect MOQT objects.  The caution against short tags in {{Section 7.5 of
+I-D.ietf-sframe-enc}} still applies here, but the MOQT environment provides some
+safeguards that make it safer to use short tags, namely:
+
+* MOQT has hop-by-hop protections provided by the underlying QUIC layer, so a
+  brute-force attack could only be mounted by a relay.
+
+* MOQT tracks have predictable object arrival rates, so a receiver can interpret
+  a large deviation from this rate as a sign of an attack.
+
+* The the binding of the secure object payload to other MOQT parameters (as
+  metadata), together with MOQT's uniqueness properties ensure that a valid
+  secure object payload cannot be replayed in a different context.
 
 # IANA Considerations {#iana}
 
-## SecObj Cipher Suites {#cipher-suites}
-
-This registry lists identifiers for SecObj cipher suites, as defined in
-cipher-suites.  The cipher suite field is two bytes wide, so the valid
-cipher suites are in the range 0x0000 to 0xFFFF. Values less that 128
-are allocated by "IESG Approval" (ref rfc8126) while others values are
-"First Come First Served".
-
-Template:
-
-* Value: The numeric value of the cipher suite
-
-* Name: The name of the cipher suite
-
-* Tag Length: Length of tag in bits
-
-* Usage: Optional, Recommended, or Prohibited
-
-* Reference: The document where this wire format is defined
-
-
-Initial contents:
-
-
-| Value  | Name                          | Tag | Usage |  Reference |
-|:-------|:------------------------------|----:|:------|:-----------|
-| 0x0001 | `AES_128_GCM_SHA256_128`      | 128 | Recommended| RFC XXXX  |
-| 0x0002 | `AES_256_GCM_SHA512_128`      | 128 | Optional | RFC XXXX  |
-{: #iana-cipher-suites title="SecObj cipher suites" }
-
+This document makes no request of IANA.
 
 --- back
 
