@@ -212,98 +212,65 @@ OBJECT_STREAM Message {
 {: #fig-encrypted-object title="Security properties of a secure OBJECT_STREAM
 object.  Protection of an OBJECT_DATAGRAM message is analogous." }
 
-~~~ aasvg
-+-------------+-----------------------------------------+
-| KID (i) ... |                                         |
-+-------------+                                         |
-|                                                       |
-|                                                       |
-|                                                       |
-|                                                       |
-|                   Encrypted Data                      |
-|                                                       |
-|                                                       |
-|                                                       |
-|                                                       |
-+-------------------------------------------------------+
-|                 Authentication Tag                    |
-+-------------------------------------------------------+
-~~~
-{: #fig-secure-object-payload title="The payload of a secure object" }
-
-Specifically, the payload of a secure object comprises a varint-encoded KID
-value, followed by  the "encrypted data" and
-"authentication tag" portions of an SFrame ciphertext object, as described in
-{{Section 4.2 of !I-D.ietf-sframe-enc}}.  That is, the secure object payload is
-an SFrame ciphertext without the SFrame Header.  Rather than transmitting the
-SFrame Header, MOQT producers and consumers synthesize it from the information
-in the object being protected, as described in {{mapping-between-sframe-and-moqt}}.
-
 ## Setup Assumptions
 
-This scheme applies SFrame on a per-track basis.  We assume that the application
-assigns each track a set of (KID, `base_key`) tuples, where each `base_key` is
-known only to authorized producer and consumers for a given track. How these
-per-track secrets are established is outside the scope of this specification. We
-also assume that the application defines which KID should be used for a given
-encryption operation.  (For decryption, the KID is obtained from the object
-payload.)
+We assume that the application assigns each track a set of (KID, `base_key`)
+tuples, where each `base_key` is known only to authorized producer and consumers
+for a given track. How these per-track secrets are established is outside the
+scope of this specification. We also assume that the application defines
+which KID should be used for a given encryption operation.  (For decryption,
+the KID is obtained from the object payload.)
 
 It is also up to the application to specify the ciphersuite to be used for each
-track's SFrame context.  Any SFrame ciphersuite can be used. 
+track's encryption context.  Any SFrame ciphersuite can be used. 
 
-> **NOTE:** This is described as having a single key per track right now, for
-> simplicity.  It will likely be useful to have multiple keys per track, e.g.,
-> to accommodate a track spanning multiple MLS epochs.  You could also
-> accommodate multiple senders in the same track this way, though that seems
-> problematic for other reasons (namely object name uniqueness).  In any case,
-> these variants can be distinguished by KID, and the KID will have to be
-> carried in the protected object payload.
+## Secure Object Format
 
-> **NOTE:** You could also use the track names to derive keys off of a master
-> key, something like `track_base_key = HKDF(track_id, master_key)`.  This could
-> be useful, e.g., if the `master_key` is exported from MLS.  SFrame will also
-> derive different base keys for different KID values, so in principle, you
-> could use the KID to distinguish tracks.  But as discussed above, we probably
-> want to use the KID for other purposes.
+The payload of a secure object comprises an AEAD-encrypted object payload, with
+a header prepended that specifies the KID in use.
 
-## Mapping Between SFrame and MOQT
-
-MOQT secure objects are protected and unprotected by means of the analogous
-SFrame operations.  SFrame the protect operation requires KID, CTR, and metadata
-inputs, and produces an SFrame ciphertext structure as output; the unprotect
-operation takes as input an SFrame ciphertext (including KID and CTR in a
-header) and metadata.
-
-~~~ aasvg
-+-+----+-+----+--------------------+--------------------+
-|K|KLEN|C|CLEN|    Key ID = App    | Counter = Grp+Obj  | <---- Synthesized
-+-+----+-+----+--------------------+--------------------+ -.
-|                                                       |   |
-|                                                       |   |
-|                                                       |   |
-|                                                       |   |
-|                   Encrypted Data                      |   |
-|                                                       |   +-- MOQT Object
-|                                                       |   |   Payload
-|                                                       |   |
-|                                                       |   |
-+-------------------------------------------------------+   |
-|                 Authentication Tag                    |   |
-+-------------------------------------------------------+ -'
+~~~ pseudocode
+SECURE_OBJECT {
+  Key ID (i),
+  Encrypted Data (..),
+}
 ~~~
-{: #fig-sframe-ciphertext title="An SFrame, as it relates to MOQT" }
 
-For protect/unprotect of MOQT objects, the KID, CTR and metadata fields are
-constructed as follows:
+## Encryption Schema
 
-* The KID value is provided by the application, as discussed in
-  {{setup-assumptions}}.
+MOQT secure object protection relies on an SFrame cipher suite to define the
+AEAD encryption algorithm and hash algorithm in use {{I-D.ietf-sframe-enc}}.  We
+will refer to the following aspects of the AEAD and the hash algorithm below:
 
-* The CTR value comprises the encoding of Group ID and Object ID as QUIC
-  varints, padded to 8 bytes on the right, interpreted as a 64-bit big-endian
-  integer. (Note that this implies that the total bit length of the encoded
-  Group ID and Object ID MUST be less than 64).
+* `AEAD.Encrypt` and `AEAD.Decrypt` - The encryption and decryption functions
+  for the AEAD.  We follow the convention of RFC 5116 {{!RFC5116}} and consider
+  the authentication tag part of the ciphertext produced by `AEAD.Encrypt` (as
+  opposed to a separate field as in SRTP {{?RFC3711}}).
+
+* `AEAD.Nk` - The size in bytes of a key for the encryption algorithm
+
+* `AEAD.Nn` - The size in bytes of a nonce for the encryption algorithm
+
+* `AEAD.Nt` - The overhead in bytes of the encryption algorithm (typically the
+  size of a "tag" that is added to the plaintext)
+
+* `AEAD.Nka` - For cipher suites using the compound AEAD described in
+  {{aes-ctr-with-sha2}}, the size in bytes of a key for the underlying encryption
+  algorithm
+
+* `Hash.Nh` - The size in bytes of the output of the hash function
+
+## Metadata Authentication
+
+The KID, track name, group ID, and object ID of the object are authenticated as
+part of secure object encryption.  This ensures, for example, that encrypted
+objects cannot be replayed across tracks.
+
+The group ID and object ID are used to form a 64-bit counter (CTR) value, which
+is used to derive the nonce used in AEAD encryption.  The CTR value is formed by
+encoding the group ID and object ID as QUIC varints, concatenating these
+representations.  This scheme MUST NOT be applied to an object where the total
+length of the encoded group ID and object ID is greater than 64 bits.
 
 ``` python
 def encode_varint(x):
@@ -326,112 +293,160 @@ def encode_ctr(group_id, object_id):
     return (group_id << group_shift) | (object_id << object_shift)
 ```
 
-* The `metadata` field is the FullTrackName value for the track within which the
-  object is being sent.
+When protecting or unprotecting a secure object, an endpoint encodes the KID
+value, CTR value, and track name in the following data structure, for input to
+the AEAD function's AAD argument:
 
-## Protect
+``` pseudocode
+SECURE_OBJECT_AAD {
+    Extended KID Flag (1),
+    KID or KID Length (3),
+    Extended CTR Flag (1),
+    CTR or CTR Length (3),
+    KID (..),
+    CTR (..),
+    Track Name (..),
+}
+```
 
-To construct an MOQT secure object from an unprotected MOQT object, we perform
-an SFrame encryption and then throw away the SFrame header (since it can be
-reconstructed by the other side).
+Extended KID Flag:
+: Indicates if the K field contains the KID or the KID length.
 
-1. Select the appropriate SFrame context for the track (see
-   {{setup-assumptions}}).
+KID or KID Length:
+: If the X flag is set to 0, this field contains the KID.  If the X flag is
+set to 1, then it contains the length of the KID, minus one.
 
-2. Compute the CTR, and metadata values for the object (see
-   {{mapping-between-sframe-and-moqt}}).
+Extended CTR Flag:
+: Indicates if the C field contains the CTR or the CTR length.
 
-3. Perform an SFrame encryption with the KID value provided by the application,
-   the computed CTR and metadata values, and the plaintext parameter set to the
-   payload of the MOQT object (as described in {{Section 4.4.3 of
-   I-D.ietf-sframe-enc}}), returning an SFrame ciphertext object.
+CTR or CTR Length:
+: This field contains the CTR if the Y flag is set to 0, or the CTR
+length, minus one, if set to 1.
 
-4. Construct an MOQT secure object of the same type as the input object, with
-   the following context:
-    * Set the payload to the contents of the "encrypted data" and
-      "authentication tag" portion of the SFrame ciphertext.
-    * Set the other fields of the message to the corresponding fields from the
-      input message.
+KID:
+: If the Extended KID Flag is set, then this field contains the encoded KID
+value.  Otherwise, it MUST have zero length.
 
-Note that the offset of the required bytes in the SFrame ciphertext can be
-computed by parsing the "config byte" which is the first byte of the SFrame
-ciphertext.
+CTR:
+: If the Extended CTR Flag is set, then this field contains the encoded CTR
+value.  Otherwise, it MUST have zero length.
+
+Track Name:
+: The FullTrackName for the track within which this object is being sent.
+
+## Key Derivation
+
+Encryption and decryption use a key and salt derived from the `base_key`
+associated with a KID.  Given a `base_key` value, the key and salt are derived
+using HMAC-based Key Derivation Function (HKDF) {{!RFC5869}} as follows:
 
 ~~~ pseudocode
-def moqt_protect(full_track_name, kid, object):
-    # Idenitfy the appropriate SFrame context
-    ctx = sframe_context_for_track(full_track_name)
-    
-    # Compute the required SFrame parameters
+def derive_key_salt(KID, base_key):
+  moq_secret = HKDF-Extract("", base_key)
+
+  moq_key_label = "SFrame 1.0 Secret key " + KID + cipher_suite
+  moq_key =
+    HKDF-Expand(moq_secret, moq_key_label, AEAD.Nk)
+
+  moq_salt_label = "SFrame 1.0 Secret salt " + KID + cipher_suite
+  moq_salt =
+    HKDF-Expand(moq_secret, moq_salt_label, AEAD.Nn)
+
+  return moq_key, moq_salt
+~~~
+
+In the derivation of `moq_secret`:
+
+* The `+` operator represents concatenation of byte strings.
+
+* The KID value is encoded as an 8-byte big-endian integer.
+
+* The `cipher_suite` value is a 2-byte big-endian integer representing the
+  cipher suite in use (see {{I-D.ietf-sframe-enc}}).
+
+The hash function used for HKDF is determined by the cipher suite in use.
+
+## Encryption
+
+MOQT secure object encryption uses the AEAD encryption algorithm for the cipher
+suite in use.  The key for the encryption is the `moq_key`.  The nonce is
+formed by first XORing the `moq_salt` with the current CTR value, and then
+encoding the result as a big-endian integer of length `AEAD.Nn`.
+
+~~~ pseudocode
+def encrypt(full_track_name, kid, object):
+    # Identify the appropriate encryption context
+    ctx = context_for_track(full_track_name)
+    moq_key, moq_salt = ctx.key_store[kid]
+
+    # Compute the required CTR parameter
     ctr = encode_ctr(object.group_id, object.object_id)
-    metadata = full_track_name
 
-    # Perform an SFrame encryption
-    sframe_ciphertext = ctx.encrypt(kid, ctr, metadata, object.payload)
+    # Assemble the AAD value
+    aad = encode_aad(kid, ctr, full_track_name)
 
-    # Replace the object's payload with the encrypted data
+    # Perform the AEAD encryption
+    nonce = xor(moq_salt, ctr)
+    encrypted_payload = AEAD.encrypt(moq_key, nonce, aad, object.payload)
+
+    # Assemble the secure object payload
     (encoded_kid, _) = encode_varint(kid)
-    ciphertext_offset = sframe_header_len(sframe_ciphertext[0])
-    object.payload = encoded_kid + sframe_ciphertext[ciphertext_offset:]
+    object.payload = encoded_kid + encrypted_payload
 ~~~
 
 ## Decryption
 
-To transform an MOQT secure object back into its plaintext form, we first
-synthesize an SFrame ciphertext representing the encrypted payload, and then
-decrypt it to obtain the payload for the MOQT object.
-
-1. Select the appropriate SFrame context for the track (see
-   {{setup-assumptions}}).
-
-2. Compute the CTR and metadata values for the object (see
-   {{mapping-between-sframe-and-moqt}}).
-
-3. Parse the payload of the MOQT secure object to obtain:
-    a. The KID value
-    b. The SFrame ciphertext data
-
-4. Construct an SFrame ciphertext:
-    * Construct an SFrame header value that represents KID and CTR
-      values, as defined in {{Section 4.3 of I-D.ietf-sframe-enc}}.
-    * Append to the SFrame header the SFrame ciphertext data parsed from the
-      object payload.
-
-5. Perform an SFrame decryption with the SFrame ciphertext and the computed
-   metadata as input, as described in {{Section 4.4.4 of I-D.ietf-sframe-enc}},
-   returning a plaintext value.
-
-6. Construct an MOQT object of the same type as the input object, with
-   the following context:
-    * Set the payload to the plaintext value returned by SFrame decryption.
-    * Set the other fields of the message to the corresponding fields from the
-      input message.
+The KID field in the secure object payload is used to find the right key and
+salt for the encrypted frame, among those defined for the object's track, and
+the CTR field is used to construct the nonce. The decryption procedure is
+as follows:
 
 ~~~ pseudocode
-def moqt_unprotect(full_track_name, object):
-    # Idenitfy the appropriate SFrame context
-    ctx = sframe_context_for_track(full_track_name)
-    
-    # Parse the object payload
+def decrypt(full_track_name, object):
+    # Parse the secure object payload
     (kid, kid_byte_len) = parse_varint(object.payload)
-    sframe_ciphertext_data = object.payload[kid_byte_len:]
+    ciphertext = object.payload[kid_byte_len:]
+    
+    # Identify the appropriate encryption context
+    ctx = context_for_track(full_track_name)
+    moq_key, moq_salt = ctx.key_store[kid]
 
-    # Compute the required SFrame parameters
+    # Compute the required CTR parameter
     ctr = encode_ctr(object.group_id, object.object_id)
-    metadata = full_track_name
 
-    # Synthesize an SFrame ciphertext
-    header = encode_sframe_header(kid, ctr)
-    sframe_ciphertext = concat(header, sframe_ciphertext_data)
+    # Assemble the AAD value
+    aad = encode_aad(kid, ctr, full_track_name)
 
-    # Perform an SFrame decryption
-    plaintext = ctx.decrypt(metadata, sframe_ciphertext)
-
-    # Replace the object's payload with the decrypted data
-    object.payload = plaintext
+    # Perform the AEAD decryption
+    object.payload = AEAD.decrypt(moq_key, nonce, aad, ciphertext)
 ~~~
 
+If a ciphertext fails to decrypt because there is no key available for the KID
+value presented, the client MAY buffer the ciphertext and retry decryption once
+a key with that KID is received.  If a ciphertext fails to decrypt for any other
+reason, the client MUST discard the ciphertext. Invalid ciphertexts SHOULD be
+discarded in a way that is indistinguishable (to an external observer) from
+having processed a valid ciphertext.  In other words, the decryption
+operation should take the same amount of time regardless of whether decryption
+succeeds or fails.
+
 # Security Considerations {#security}
+
+The cryptographic computations described in this document are exactly those
+performed in the SFrame encryption scheme defined in {{!I-D.ietf-sframe-enc}}.
+The scheme in this document is effectively a "virtualized" version of SFrame:
+
+* The CTR value is not carried in the object payload, but instead synthesized
+  from the group ID and object ID.
+
+* The SFrame Header is not sent on the wire, but constructed locally by the
+  encrypting and decrypting endpoints.
+
+* The `metadata` input in to SFrame operations is defined to be the
+  FullTrackName value for the object.
+
+The security considerations discussed in the SFrame specification thus also
+apply here.
 
 The SFrame specification lists several things that an application needs to
 account for in order to use SFrame securely, which are all accounted for here:
