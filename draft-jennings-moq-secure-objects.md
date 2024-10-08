@@ -250,7 +250,7 @@ encryption operation.  (For decryption, the KID is obtained from the object
 payload.)
 
 It is also up to the application to specify the ciphersuite to be used for each
-track's SFrame context.  Any SFrame ciphersuite can be used. 
+track's SFrame context.  Any SFrame ciphersuite can be used.
 
 > **NOTE:** This is described as having a single key per track right now, for
 > simplicity.  It will likely be useful to have multiple keys per track, e.g.,
@@ -319,10 +319,10 @@ def encode_varint(x):
 def encode_ctr(group_id, object_id):
     (group_id, group_bits) = encode_varint(group_id)
     (object_id, object_bits) = encode_varint(object_id)
-    
+
     group_shift = 64 - group_bits
     object_shift = group_shift - object_bits
-    
+
     return (group_id << group_shift) | (object_id << object_shift)
 ```
 
@@ -361,7 +361,7 @@ ciphertext.
 def moqt_protect(full_track_name, kid, object):
     # Idenitfy the appropriate SFrame context
     ctx = sframe_context_for_track(full_track_name)
-    
+
     # Compute the required SFrame parameters
     ctr = encode_ctr(object.group_id, object.object_id)
     metadata = full_track_name
@@ -411,7 +411,7 @@ decrypt it to obtain the payload for the MOQT object.
 def moqt_unprotect(full_track_name, object):
     # Idenitfy the appropriate SFrame context
     ctx = sframe_context_for_track(full_track_name)
-    
+
     # Parse the object payload
     (kid, kid_byte_len) = parse_varint(object.payload)
     sframe_ciphertext_data = object.payload[kid_byte_len:]
