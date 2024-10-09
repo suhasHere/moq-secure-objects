@@ -222,7 +222,7 @@ which KID should be used for a given encryption operation.  (For decryption,
 the KID is obtained from the object payload.)
 
 It is also up to the application to specify the ciphersuite to be used for each
-track's encryption context.  Any SFrame ciphersuite can be used. 
+track's encryption context.  Any SFrame ciphersuite can be used.
 
 ## Secure Object Format
 
@@ -239,7 +239,7 @@ SECURE_OBJECT {
 ## Encryption Schema
 
 MOQT secure object protection relies on an SFrame cipher suite to define the
-AEAD encryption algorithm and hash algorithm in use {{I-D.ietf-sframe-enc}}.  We
+AEAD encryption algorithm and hash algorithm in use {{!RFC9605}}.  We
 will refer to the following aspects of the AEAD and the hash algorithm below:
 
 * `AEAD.Encrypt` and `AEAD.Decrypt` - The encryption and decryption functions
@@ -254,8 +254,8 @@ will refer to the following aspects of the AEAD and the hash algorithm below:
 * `AEAD.Nt` - The overhead in bytes of the encryption algorithm (typically the
   size of a "tag" that is added to the plaintext)
 
-* `AEAD.Nka` - For cipher suites using the compound AEAD described in
-  {{aes-ctr-with-sha2}}, the size in bytes of a key for the underlying encryption
+* `AEAD.Nka` - For cipher suites using the compound AEAD described in {{Section
+  4.5.1 of RFC9605}}, the size in bytes of a key for the underlying encryption
   algorithm
 
 * `Hash.Nh` - The size in bytes of the output of the hash function
@@ -266,11 +266,28 @@ The KID, track name, group ID, and object ID of the object are authenticated as
 part of secure object encryption.  This ensures, for example, that encrypted
 objects cannot be replayed across tracks.
 
-The group ID and object ID are used to form a 64-bit counter (CTR) value, which
-is used to derive the nonce used in AEAD encryption.  The CTR value is formed by
-encoding the group ID and object ID as QUIC varints, concatenating these
-representations.  This scheme MUST NOT be applied to an object where the total
-length of the encoded group ID and object ID is greater than 64 bits.
+When protecting or unprotecting a secure object, an endpoint encodes the key ID,
+group ID, object ID, and full track name in the following data structure, for
+input to the AEAD function's AAD argument:
+
+``` pseudocode
+SECURE_OBJECT_AAD {
+    Key ID (i),
+    Group ID (i),
+    Object ID (i),
+    Track Namespace (tuple),
+    Track Name (b),
+}
+```
+
+## Nonce Formation
+
+The group ID and object ID for an object are used to form a 96-bit counter (CTR)
+value, which XORed with a salt to form the nonce used in AEAD encryption.  The
+counter value is formed by encoding the group ID and object ID as QUIC varints,
+then concatenating these representations.  This scheme MUST NOT be applied to an
+object where group ID is larger than 2<sup>62</sup> or the object ID is larger
+than 2<sup>30</sup>.
 
 ``` python
 def encode_varint(x):
@@ -286,53 +303,12 @@ def encode_varint(x):
 def encode_ctr(group_id, object_id):
     (group_id, group_bits) = encode_varint(group_id)
     (object_id, object_bits) = encode_varint(object_id)
-    
-    group_shift = 64 - group_bits
+
+    group_shift = 96 - group_bits
     object_shift = group_shift - object_bits
-    
+
     return (group_id << group_shift) | (object_id << object_shift)
 ```
-
-When protecting or unprotecting a secure object, an endpoint encodes the KID
-value, CTR value, and track name in the following data structure, for input to
-the AEAD function's AAD argument:
-
-``` pseudocode
-SECURE_OBJECT_AAD {
-    Extended KID Flag (1),
-    KID or KID Length (3),
-    Extended CTR Flag (1),
-    CTR or CTR Length (3),
-    KID (..),
-    CTR (..),
-    Track Name (..),
-}
-```
-
-Extended KID Flag:
-: Indicates if the K field contains the KID or the KID length.
-
-KID or KID Length:
-: If the X flag is set to 0, this field contains the KID.  If the X flag is
-set to 1, then it contains the length of the KID, minus one.
-
-Extended CTR Flag:
-: Indicates if the C field contains the CTR or the CTR length.
-
-CTR or CTR Length:
-: This field contains the CTR if the Y flag is set to 0, or the CTR
-length, minus one, if set to 1.
-
-KID:
-: If the Extended KID Flag is set, then this field contains the encoded KID
-value.  Otherwise, it MUST have zero length.
-
-CTR:
-: If the Extended CTR Flag is set, then this field contains the encoded CTR
-value.  Otherwise, it MUST have zero length.
-
-Track Name:
-: The FullTrackName for the track within which this object is being sent.
 
 ## Key Derivation
 
@@ -406,7 +382,7 @@ def decrypt(full_track_name, object):
     # Parse the secure object payload
     (kid, kid_byte_len) = parse_varint(object.payload)
     ciphertext = object.payload[kid_byte_len:]
-    
+
     # Identify the appropriate encryption context
     ctx = context_for_track(full_track_name)
     moq_key, moq_salt = ctx.key_store[kid]
@@ -433,14 +409,21 @@ succeeds or fails.
 # Security Considerations {#security}
 
 The cryptographic computations described in this document are exactly those
-performed in the SFrame encryption scheme defined in {{!I-D.ietf-sframe-enc}}.
+performed in the SFrame encryption scheme defined in {{!I-D.ietf-sframe-enc}},
 The scheme in this document is effectively a "virtualized" version of SFrame:
 
-* The CTR value is not carried in the object payload, but instead synthesized
-  from the group ID and object ID.
+* The CTR value used in nonce formation is not carried in the object payload,
+  but instead synthesized from the group ID and object ID.
 
-* The SFrame Header is not sent on the wire, but constructed locally by the
-  encrypting and decrypting endpoints.
+* The AAD for the AEAD operation is not sent on the wire (as with the SFrame
+  Header), but constructed locally by the encrypting and decrypting endpoints.
+
+* The format of the AAD is different:
+
+    * The SFrame Header is constructed using QUIC-style varints, instead of the
+      variable-length integer scheme defined in SFrame.
+
+    * The group ID and object ID are sent directly, not as the packed CTR value.
 
 * The `metadata` input in to SFrame operations is defined to be the
   FullTrackName value for the object.
@@ -464,7 +447,7 @@ account for in order to use SFrame securely, which are all accounted for here:
    ID and object ID are cryptographically bound to the secure object payload.
 
 4. **Metadata:** The content of the metadata input to SFrame operations is
-   defined in {{mapping-between-sframe-and-moqt}}.
+   defined in {{metadata-authentication}}.
 
 > **NOTE:** It is not clear to me that the anti-replay point actually holds up
 > here, but that is probably just due to the limitations of my understanding of
