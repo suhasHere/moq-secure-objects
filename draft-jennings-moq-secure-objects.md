@@ -270,7 +270,7 @@ When protecting or unprotecting a secure object, an endpoint encodes the key ID,
 group ID, object ID, and full track name in the following data structure, for
 input to the AEAD function's AAD argument:
 
-``` pseudocode
+~~~  pseudocode
 SECURE_OBJECT_AAD {
     Key ID (i),
     Group ID (i),
@@ -278,7 +278,7 @@ SECURE_OBJECT_AAD {
     Track Namespace (tuple),
     Track Name (b),
 }
-```
+~~~
 
 ## Nonce Formation
 
@@ -289,7 +289,8 @@ then concatenating these representations.  This scheme MUST NOT be applied to an
 object where group ID is larger than 2<sup>62</sup> or the object ID is larger
 than 2<sup>30</sup>.
 
-``` python
+~~~  pseudocode
+
 def encode_varint(x):
     if x < 0x40:
         return (x, 8)
@@ -308,7 +309,7 @@ def encode_ctr(group_id, object_id):
     object_shift = group_shift - object_bits
 
     return (group_id << group_shift) | (object_id << object_shift)
-```
+~~~
 
 ## Key Derivation
 
