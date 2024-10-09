@@ -320,11 +320,11 @@ using HMAC-based Key Derivation Function (HKDF) {{!RFC5869}} as follows:
 def derive_key_salt(KID, base_key):
   moq_secret = HKDF-Extract("", base_key)
 
-  moq_key_label = "SFrame 1.0 Secret key " + KID + cipher_suite
+  moq_key_label = "MOQ 1.0 Secret key " + KID + cipher_suite
   moq_key =
     HKDF-Expand(moq_secret, moq_key_label, AEAD.Nk)
 
-  moq_salt_label = "SFrame 1.0 Secret salt " + KID + cipher_suite
+  moq_salt_label = "MOQ 1.0 Secret salt " + KID + cipher_suite
   moq_salt =
     HKDF-Expand(moq_secret, moq_salt_label, AEAD.Nn)
 
@@ -427,6 +427,8 @@ The scheme in this document is effectively a "virtualized" version of SFrame:
 
 * The `metadata` input in to SFrame operations is defined to be the
   FullTrackName value for the object.
+
+* The labels used in key derivation reflect MOQ usage, not generic SFrame.
 
 The security considerations discussed in the SFrame specification thus also
 apply here.
