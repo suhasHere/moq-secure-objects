@@ -184,7 +184,7 @@ Two important properties of objects are:
 
 1. ObjectNames are globally unique in a given relay network.
 
-2. The data inside an object ( and it's size) can never change after the
+2. The data inside an object (and it's size) can never change after the
 object is first published. There can never be two objects with the same
 name but different data.
 
@@ -193,28 +193,17 @@ qualified domain names or UUIDs as part of the TrackNamespace.
 
 # Secure Objects
 
-A Secure MOQT Object is MOQT OBJECT_STREAM or OBJECT_DATAGRAM messages that has
-been protected with the scheme defined in this draft, so that its payload is
-encrypted and the whole message is authenticated by an authentication tag in the
-payload:
+{{Section 7.1.1 of I-D.ietf-moq-transport}} defines fields of a canonical
+MOQT Object. The protection scheme defined in this draft encrypts the
+`Object Payload` and the fields `Track Alias`, `Group ID`, `Object ID`,
+`Object Payload` are authenticated, regardless of the on-the-wire encoding
+of the objects over QUIC Datagrams or QUIC streams.
 
-~~~ aasvg
-OBJECT_STREAM Message {
-  Subscribe ID (i),
-  Track Alias (i),
-  Group ID (i),             <-- authenticated
-  Object ID (i),            <-- authenticated
-  Object Send Order (i),
-  Object Status (i),
-  Object Payload (..),      <-- encrypted and authenticated
-}
-~~~
-{: #fig-encrypted-object title="Security properties of a secure OBJECT_STREAM
-object.  Protection of an OBJECT_DATAGRAM message is analogous." }
+TODO: Move authentication tag to Object Header Extension.
 
 ## Setup Assumptions
 
-We assume that the application assigns each track a set of (KID, `base_key`)
+We assume that the application assigns each track a set of (KID, base_key)
 tuples, where each `base_key` is known only to authorized producer and consumers
 for a given track. How these per-track secrets are established is outside the
 scope of this specification. We also assume that the application defines
@@ -235,6 +224,8 @@ SECURE_OBJECT {
   Encrypted Data (..),
 }
 ~~~
+
+TODO: Make Key ID as Object Header Extension
 
 ## Encryption Schema
 
@@ -262,12 +253,12 @@ will refer to the following aspects of the AEAD and the hash algorithm below:
 
 ## Metadata Authentication
 
-The KID, track name, group ID, and object ID of the object are authenticated as
+The KID, fulltrackname, Group ID, and Object ID for a given object are authenticated as
 part of secure object encryption.  This ensures, for example, that encrypted
 objects cannot be replayed across tracks.
 
 When protecting or unprotecting a secure object, an endpoint encodes the key ID,
-group ID, object ID, and full track name in the following data structure, for
+Group ID, Object ID, and fulltrackname in the following data structure, for
 input to the AEAD function's AAD argument:
 
 ~~~  pseudocode
@@ -282,9 +273,9 @@ SECURE_OBJECT_AAD {
 
 ## Nonce Formation
 
-The group ID and object ID for an object are used to form a 96-bit counter (CTR)
+The Group ID and Object ID for an object are used to form a 96-bit counter (CTR)
 value, which XORed with a salt to form the nonce used in AEAD encryption.  The
-counter value is formed by encoding the group ID and object ID as QUIC varints,
+counter value is formed by encoding the Group ID and Object ID as QUIC varints,
 then concatenating these representations.  This scheme MUST NOT be applied to an
 object where group ID is larger than 2<sup>62</sup> or the object ID is larger
 than 2<sup>30</sup>.
@@ -380,11 +371,12 @@ as follows:
 
 ~~~ pseudocode
 def decrypt(full_track_name, object):
-    # Parse the secure object payload
+    # Parse the secure object payload to obtain kid
     (kid, kid_byte_len) = parse_varint(object.payload)
     ciphertext = object.payload[kid_byte_len:]
 
-    # Identify the appropriate encryption context
+    # Identify the appropriate encryption context mapped to the track alias
+    # and the kid
     ctx = context_for_track(full_track_name)
     moq_key, moq_salt = ctx.key_store[kid]
 
@@ -437,9 +429,9 @@ apply here.
 The SFrame specification lists several things that an application needs to
 account for in order to use SFrame securely, which are all accounted for here:
 
-1. **Header value uniqueness:** Uniqueness of SFrame CTR values follows from the
-   uniqueness of MOQT (group ID, object ID) pairs.  We only use one KID value,
-   but instead use distinct SFrame contexts with distinct keys per track.  This
+1. **Header value uniqueness:** Uniqueness of CTR values follows from the
+   uniqueness of MOQT (group ID, object ID). We only use one KID value, but
+   instead use distinct SFrame contexts with distinct keys per track. This
    assures that the same (`base_key`, KID, CTR) tuple is never used twice.
 
 2. **Key management:** We delegate this to the MOQT application, with subject to
@@ -449,7 +441,7 @@ account for in order to use SFrame securely, which are all accounted for here:
    the uniqueness constraints on object IDs and objects, and because the group
    ID and object ID are cryptographically bound to the secure object payload.
 
-4. **Metadata:** The content of the metadata input to SFrame operations is
+4. **Metadata:** The content of the metadata input to Secure Object operations is
    defined in {{metadata-authentication}}.
 
 > **NOTE:** It is not clear to me that the anti-replay point actually holds up
