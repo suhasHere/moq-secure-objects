@@ -429,7 +429,7 @@ The SFrame specification lists several things that an application needs to
 account for in order to use SFrame securely, which are all accounted for here:
 
 1. **Header value uniqueness:** Uniqueness of CTR values follows from the
-   uniqueness of MOQT (group ID, object ID). We only use one KID value, but
+   uniqueness of MOQT (group ID, object ID) pairs. We only use one KID value, but
    instead use distinct SFrame contexts with distinct keys per track. This
    assures that the same (`base_key`, KID, CTR) tuple is never used twice.
 
