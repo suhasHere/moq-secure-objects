@@ -257,7 +257,7 @@ part of secure object encryption.  This ensures, for example, that encrypted
 objects cannot be replayed across tracks.
 
 When protecting or unprotecting a secure object, an endpoint encodes the key ID,
-Group ID, Object ID, and fulltrackname in the following data structure, for
+Group ID, Object ID, and FullTrackName in the following data structure, for
 input to the AEAD function's AAD argument:
 
 ~~~  pseudocode
