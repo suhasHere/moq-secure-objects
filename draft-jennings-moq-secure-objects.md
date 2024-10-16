@@ -253,7 +253,7 @@ will refer to the following aspects of the AEAD and the hash algorithm below:
 
 ## Metadata Authentication
 
-The KID, fulltrackname, Group ID, and Object ID for a given object are authenticated as
+The KID, FullTrackName, Group ID, and Object ID for a given object are authenticated as
 part of secure object encryption.  This ensures, for example, that encrypted
 objects cannot be replayed across tracks.
 
