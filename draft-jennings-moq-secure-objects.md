@@ -199,7 +199,6 @@ MOQT Object. The protection scheme defined in this draft encrypts the
 and `Object Payload` fields, regardless of the on-the-wire encoding
 of the objects over QUIC Datagrams or QUIC streams.
 
-TODO: Move authentication tag to Object Header Extension.
 
 ## Setup Assumptions
 
