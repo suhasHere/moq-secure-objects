@@ -184,7 +184,7 @@ Two important properties of objects are:
 
 1. ObjectNames are globally unique in a given relay network.
 
-2. The data inside an object (and it's size) can never change after the
+2. The data inside an object (and its size) can never change after the
 object is first published. There can never be two objects with the same
 name but different data.
 
