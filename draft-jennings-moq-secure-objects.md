@@ -374,8 +374,8 @@ def decrypt(full_track_name, object):
     (kid, kid_byte_len) = parse_varint(object.payload)
     ciphertext = object.payload[kid_byte_len:]
 
-    # Identify the appropriate encryption context mapped to the track alias
-    # and the kid
+    # Identify the appropriate encryption context for the full track name
+    # and the key ID
     ctx = context_for_track(full_track_name)
     moq_key, moq_salt = ctx.key_store[kid]
 
