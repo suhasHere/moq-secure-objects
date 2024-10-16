@@ -440,7 +440,7 @@ account for in order to use SFrame securely, which are all accounted for here:
    the uniqueness constraints on object IDs and objects, and because the group
    ID and object ID are cryptographically bound to the secure object payload.
 
-4. **Metadata:** The content of the metadata input to Secure Object operations is
+4. **Metadata:** The analogue of the SFrame metadata input is
    defined in {{metadata-authentication}}.
 
 > **NOTE:** It is not clear to me that the anti-replay point actually holds up
