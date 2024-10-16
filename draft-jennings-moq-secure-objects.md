@@ -195,8 +195,8 @@ qualified domain names or UUIDs as part of the TrackNamespace.
 
 {{Section 7.1.1 of I-D.ietf-moq-transport}} defines fields of a canonical
 MOQT Object. The protection scheme defined in this draft encrypts the
-`Object Payload` and the fields `Track Alias`, `Group ID`, `Object ID`,
-`Object Payload` are authenticated, regardless of the on-the-wire encoding
+`Object Payload` and authenticates the `Track Alias`, `Group ID`, `Object ID`,
+and `Object Payload` fields, regardless of the on-the-wire encoding
 of the objects over QUIC Datagrams or QUIC streams.
 
 TODO: Move authentication tag to Object Header Extension.
