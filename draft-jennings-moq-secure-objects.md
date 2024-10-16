@@ -203,7 +203,7 @@ TODO: Move authentication tag to Object Header Extension.
 
 ## Setup Assumptions
 
-We assume that the application assigns each track a set of (KID, base_key)
+We assume that the application assigns each track a set of (KID, `base_key`)
 tuples, where each `base_key` is known only to authorized producer and consumers
 for a given track. How these per-track secrets are established is outside the
 scope of this specification. We also assume that the application defines
