@@ -370,7 +370,7 @@ as follows:
 
 ~~~ pseudocode
 def decrypt(full_track_name, object):
-    # Parse the secure object payload to obtain kid
+    # Parse the secure object payload to obtain key ID and ciphertext
     (kid, kid_byte_len) = parse_varint(object.payload)
     ciphertext = object.payload[kid_byte_len:]
 
