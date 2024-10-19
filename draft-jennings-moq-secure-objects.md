@@ -250,7 +250,7 @@ will refer to the following aspects of the AEAD and the hash algorithm below:
 
 * `Hash.Nh` - The size in bytes of the output of the hash function
 
-## Metadata Authentication
+## Metadata Authentication {#aad}
 
 The KID, FullTrackName, Group ID, and Object ID for a given object are authenticated as
 part of secure object encryption.  This ensures, for example, that encrypted
@@ -270,7 +270,7 @@ SECURE_OBJECT_AAD {
 }
 ~~~
 
-## Nonce Formation
+## Nonce Formation {#nonce}
 
 The Group ID and Object ID for an object are used to form a 96-bit counter (CTR)
 value, which XORed with a salt to form the nonce used in AEAD encryption.  The
@@ -301,7 +301,7 @@ def encode_ctr(group_id, object_id):
     return (group_id << group_shift) | (object_id << object_shift)
 ~~~
 
-## Key Derivation
+## Key Derivation {#keys}
 
 Encryption and decryption use a key and salt derived from the `track_base_key`
 associated with a KID.  Given a `track_base_key` value, the key and salt are derived
@@ -333,12 +333,45 @@ In the derivation of `moq_secret`:
 
 The hash function used for HKDF is determined by the cipher suite in use.
 
-## Encryption
+## Encryption {#encrypt}
 
 MOQT secure object encryption uses the AEAD encryption algorithm for the cipher
-suite in use.  The key for the encryption is the `moq_key`.  The nonce is
+suite in use.  The key for the encryption is the `moq_key` derived
+from the `track_base_key` {{keys}}.  The nonce is
 formed by first XORing the `moq_salt` with the current CTR value, and then
 encoding the result as a big-endian integer of length `AEAD.Nn`.
+
+The payload field from the MOQT object is used by the AEAD
+algorithm for the plaintext.
+
+The encryptor forms an SecObj header using the KID value provided.
+
+The encryption procedure is as follows:
+
+1. From the MOQT Object obtain MOQT object payload as the plaintext to
+   encrypt. Get the GroupId and ObjectId from the MOQT object envelope.
+
+2. Retrieve the `moq_key` and `moq_salt` matching the KID.
+
+3. Form the aad input as described in {{aad}}.
+
+4. Form the nonce by as described in {{nonce}}.
+
+5. Apply the AEAD encryption function with moq_key, nonce, aad and
+   object payload as inputs.
+
+The final SecureObject is formed from the MOQT transport headers, then
+the KID encdoded as QUIC variale length integer{{!RFC9000}},
+ followed by the output of the encryption.
+
+~~~~
++-----------------+------------------+-----------------+
+|    MOQT Object  |   SecObj Header  |     SecObj      |
+|    Header       |     (KID)        |     Ciphertext  |
++-----------------+------------------+-----------------+
+~~~~
+
+Below shows psuedocode for the encryption process.
 
 ~~~ pseudocode
 def encrypt(full_track_name, kid, object):
@@ -360,6 +393,7 @@ def encrypt(full_track_name, kid, object):
     (encoded_kid, _) = encode_varint(kid)
     object.payload = encoded_kid + encrypted_payload
 ~~~
+
 
 ## Decryption
 
@@ -441,7 +475,7 @@ account for in order to use SFrame securely, which are all accounted for here:
    ID and object ID are cryptographically bound to the secure object payload.
 
 4. **Metadata:** The analogue of the SFrame metadata input is
-   defined in {{metadata-authentication}}.
+   defined in {{aad}}.
 
 > **NOTE:** It is not clear to me that the anti-replay point actually holds up
 > here, but that is probably just due to the limitations of my understanding of
