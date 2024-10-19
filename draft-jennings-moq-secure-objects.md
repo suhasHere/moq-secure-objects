@@ -397,10 +397,27 @@ def encrypt(full_track_name, kid, object):
 
 ## Decryption
 
-The KID field in the secure object payload is used to find the right key and
-salt for the encrypted frame, among those defined for the object's track, and
-the CTR field is used to construct the nonce. The decryption procedure is
-as follows:
+For decrypting, the KID field in the secure object payload is used to find the
+right key and salt for the encrypted object, the nonce field is
+obtained from the `GroupId` and `ObjectId` fields of the MOQT object header.
+
+The decryption procedure is as follows:
+
+1. Parse the SecureObject to obtain KID, the ciphertext corresponding
+   to MOQT object payload and the GroupID and ObjectId from the MOQT
+   object envelope.
+
+2. Retrieve the `moq_key` and `moq_salt` matching the KID.
+
+3. Form the aad input as described in {{aad}}.
+
+4. Form the nonce by as described in {{nonce}}.
+
+5. Apply the AEAD decryption function with moq_key, nonce, aad and
+   ciphertext as inputs.
+
+
+Below shows psuedocode for the decrpytion process
 
 ~~~ pseudocode
 def decrypt(full_track_name, object):
@@ -420,8 +437,10 @@ def decrypt(full_track_name, object):
     aad = encode_aad(kid, ctr, full_track_name)
 
     # Perform the AEAD decryption
+    nonce = xor(moq_salt, ctr)
     object.payload = AEAD.decrypt(moq_key, nonce, aad, ciphertext)
 ~~~
+
 
 If a ciphertext fails to decrypt because there is no key available for the KID
 value presented, the client MAY buffer the ciphertext and retry decryption once
@@ -476,6 +495,7 @@ account for in order to use SFrame securely, which are all accounted for here:
 
 4. **Metadata:** The analogue of the SFrame metadata input is
    defined in {{aad}}.
+
 
 > **NOTE:** It is not clear to me that the anti-replay point actually holds up
 > here, but that is probably just due to the limitations of my understanding of
