@@ -202,8 +202,8 @@ of the objects over QUIC Datagrams or QUIC streams.
 
 ## Setup Assumptions
 
-We assume that the application assigns each track a set of (KID, `base_key`)
-tuples, where each `base_key` is known only to authorized producer and consumers
+We assume that the application assigns each track a set of (KID, `track_base_key`)
+tuples, where each `track_base_key` is known only to authorized producer and consumers
 for a given track. How these per-track secrets are established is outside the
 scope of this specification. We also assume that the application defines
 which KID should be used for a given encryption operation.  (For decryption,
@@ -303,13 +303,13 @@ def encode_ctr(group_id, object_id):
 
 ## Key Derivation
 
-Encryption and decryption use a key and salt derived from the `base_key`
-associated with a KID.  Given a `base_key` value, the key and salt are derived
+Encryption and decryption use a key and salt derived from the `track_base_key`
+associated with a KID.  Given a `track_base_key` value, the key and salt are derived
 using HMAC-based Key Derivation Function (HKDF) {{!RFC5869}} as follows:
 
 ~~~ pseudocode
-def derive_key_salt(KID, base_key):
-  moq_secret = HKDF-Extract("", base_key)
+def derive_key_salt(KID, track_base_key):
+  moq_secret = HKDF-Extract("", track_base_key)
 
   moq_key_label = "MOQ 1.0 Secret key " + KID + cipher_suite
   moq_key =
@@ -431,7 +431,7 @@ account for in order to use SFrame securely, which are all accounted for here:
 1. **Header value uniqueness:** Uniqueness of CTR values follows from the
    uniqueness of MOQT (group ID, object ID) pairs. We only use one KID value, but
    instead use distinct SFrame contexts with distinct keys per track. This
-   assures that the same (`base_key`, KID, CTR) tuple is never used twice.
+   assures that the same (`track_base_key`, KID, CTR) tuple is never used twice.
 
 2. **Key management:** We delegate this to the MOQT application, with subject to
    the assumptions described in {{setup-assumptions}}.
