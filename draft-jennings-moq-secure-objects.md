@@ -212,10 +212,10 @@ the KID is obtained from the object payload.)
 It is also up to the application to specify the ciphersuite to be used for each
 track's encryption context.  Any SFrame ciphersuite can be used.
 
-## Secure Object Format
+## Secure Object Format {#format}
 
 The payload of a secure object comprises an AEAD-encrypted object payload, with
-a header prepended that specifies the KID in use.
+a header prepended that specifies the KID (encoded as QUIC Varint) in use.
 
 ~~~ pseudocode
 SECURE_OBJECT {
@@ -223,8 +223,6 @@ SECURE_OBJECT {
   Encrypted Data (..),
 }
 ~~~
-
-TODO: Make Key ID as Object Header Extension
 
 ## Encryption Schema
 
@@ -360,6 +358,8 @@ The encryption procedure is as follows:
 5. Apply the AEAD encryption function with moq_key, nonce, aad and
    object payload as inputs.
 
+6. Add the KID value to `KID Object Header Extension`.
+
 The final SecureObject is formed from the MOQT transport headers, then
 the KID encdoded as QUIC variale length integer{{!RFC9000}},
  followed by the output of the encryption.
@@ -367,7 +367,7 @@ the KID encdoded as QUIC variale length integer{{!RFC9000}},
 ~~~~
 +-----------------+------------------+-----------------+
 |    MOQT Object  |   SecObj Header  |     SecObj      |
-|    Header       |     (KID)        |     Ciphertext  |
+|    Header       | (KID Extension)  |     Ciphertext  |
 +-----------------+------------------+-----------------+
 ~~~~
 
@@ -519,7 +519,13 @@ safeguards that make it safer to use short tags, namely:
 
 # IANA Considerations {#iana}
 
-This document makes no request of IANA.
+This document defines a new MOQT Object extension header for carrying KID value,
+under the `MOQ Extension Headers` registry.
+
+| Type |                         Value                        |
+| ---- | ---------------------------------------------------- |
+| 0x1  | KID Value - see {{format}}
+
 
 --- back
 
