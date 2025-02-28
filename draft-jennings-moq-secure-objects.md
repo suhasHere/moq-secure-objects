@@ -67,7 +67,7 @@ As such, two layers of security are required:
 
 1. Hop-by-hop (HBH) security between two MOQT relays
 
-2. End-to-end (E2E) security from the Publisher of an MOQT object to End
+2. End-to-end (E2E) security from the Original Publisher of an MOQT object to End
    Subscribers
 
 The HBH security is provided by TLS in the QUIC connection that MOQT
@@ -101,26 +101,20 @@ E2EE:
 HBH:
 : Hop By Hop
 
-Producer:
-: Software that creates and encrypts MoQ Objects.
-
-Consumer:
-: Software that decrypts MoQ Objects.
-
 # MOQT Object Model Recap {#moqt}
 
 MOQT defines a publish/subscribe based media delivery protocol, where in
-endpoints, called producers, publish objects which are delivered via
-participating relays to receiving endpoints, called consumers.
+endpoints, called original publishers, publish objects which are delivered via
+participating relays to receiving endpoints, called end subscribers.
 
 {{Section 2 of I-D.ietf-moq-transport}} defines hierarchical object model for
 application data, comprised of objects, groups and tracks.
 
 Objects defines the basic data element, an addressable unit whose
 payload is sequence of bytes. All objects belong to a group, indicating
-ordering and potential dependencies. A track contains a sequence of
-groups and serves as the entity against which a consumer issues a
-subscription request.
+ordering and potential dependencies. A track contains has collection of
+groups and serves as the entity against which a subscribers issue
+subscription requests.
 
 ~~~ aasvg
 Media Over QUIC Application
@@ -155,11 +149,11 @@ Media Over QUIC Application
 ~~~
 {: #fig-moqt-session title="Structure of an MOQT session" }
 
-Objects are comprised of two parts: envelope and a payload. The envelope
+Objects are comprised of two parts: envolope and a payload. The envelope
 is never end to end encrypted and is always visible to relays. The
 payload portion may be end to end encrypted, in which case it is only
-visible to the producer and consumer. The application is solely
-responsible for the content of the object payload.
+visible to the original publisher and the end subscribers. The application is
+solely responsible for the content of the object payload.
 
 Tracks are identified by a combination of its TrackNamespace and
 TrackName.  TrackNamespace and TrackName are treated as a sequence of
@@ -193,21 +187,21 @@ qualified domain names or UUIDs as part of the TrackNamespace.
 
 # Secure Objects
 
-{{Section 7.1.1 of I-D.ietf-moq-transport}} defines fields of a canonical
+{{Section 8.1.1 of I-D.ietf-moq-transport}} defines fields of a canonical
 MOQT Object. The protection scheme defined in this draft encrypts the
-`Object Payload` and authenticates the `Track Alias`, `Group ID`, `Object ID`,
+`Object Payload` and authenticates the  `Group ID`, `Object ID`,
 and `Object Payload` fields, regardless of the on-the-wire encoding
 of the objects over QUIC Datagrams or QUIC streams.
 
 
 ## Setup Assumptions
 
-We assume that the application assigns each track a set of (KID, `track_base_key`)
-tuples, where each `track_base_key` is known only to authorized producer and consumers
-for a given track. How these per-track secrets are established is outside the
-scope of this specification. We also assume that the application defines
-which KID should be used for a given encryption operation.  (For decryption,
-the KID is obtained from the object payload.)
+We assume that the application assigns each track a set of (Key ID, `track_base_key`)
+tuples, where each `track_base_key` is known only to authorized original publishers
+and end subscribers for a given track. How these per-track secrets are established
+is outside the scope of this specification. We also assume that the application
+defines which Key ID should be used for a given encryption operation (For decryption,
+the Key ID is obtained from the object payload).
 
 It is also up to the application to specify the ciphersuite to be used for each
 track's encryption context.  Any SFrame ciphersuite can be used.
@@ -215,7 +209,7 @@ track's encryption context.  Any SFrame ciphersuite can be used.
 ## Secure Object Format {#format}
 
 The payload of a secure object comprises an AEAD-encrypted object payload, with
-a header prepended that specifies the KID (encoded as QUIC Varint) in use.
+object header extension that specifies the Key ID in use.
 
 ~~~ pseudocode
 SECURE_OBJECT {
@@ -250,11 +244,11 @@ will refer to the following aspects of the AEAD and the hash algorithm below:
 
 ## Metadata Authentication {#aad}
 
-The KID, FullTrackName, Group ID, and Object ID for a given object are authenticated as
-part of secure object encryption.  This ensures, for example, that encrypted
-objects cannot be replayed across tracks.
+The Key ID, FullTrackName, Group ID, and Object ID for a given object are
+authenticated as part of secure object encryption.  This ensures, for example,
+that encrypted objects cannot be replayed across tracks.
 
-When protecting or unprotecting a secure object, an endpoint encodes the key ID,
+When protecting or unprotecting a secure object, an endpoint encodes the Key ID,
 Group ID, Object ID, and FullTrackName in the following data structure, for
 input to the AEAD function's AAD argument:
 
@@ -302,18 +296,17 @@ def encode_ctr(group_id, object_id):
 ## Key Derivation {#keys}
 
 Encryption and decryption use a key and salt derived from the `track_base_key`
-associated with a KID.  Given a `track_base_key` value, the key and salt are derived
+associated with a Key ID.  Given a `track_base_key` value, the key and salt are derived
 using HMAC-based Key Derivation Function (HKDF) {{!RFC5869}} as follows:
 
 ~~~ pseudocode
-def derive_key_salt(KID, track_base_key):
+def derive_key_salt(Key ID, track_base_key):
   moq_secret = HKDF-Extract("", track_base_key)
-
-  moq_key_label = "MOQ 1.0 Secret key " + KID + cipher_suite
+  moq_key_label = "MOQ 1.0 Secret key " + Key ID + cipher_suite
   moq_key =
     HKDF-Expand(moq_secret, moq_key_label, AEAD.Nk)
 
-  moq_salt_label = "MOQ 1.0 Secret salt " + KID + cipher_suite
+  moq_salt_label = "MOQ 1.0 Secret salt " + Key ID + cipher_suite
   moq_salt =
     HKDF-Expand(moq_secret, moq_salt_label, AEAD.Nn)
 
@@ -324,7 +317,7 @@ In the derivation of `moq_secret`:
 
 * The `+` operator represents concatenation of byte strings.
 
-* The KID value is encoded as an 8-byte big-endian integer.
+* The Key ID value is encoded as an 8-byte big-endian integer.
 
 * The `cipher_suite` value is a 2-byte big-endian integer representing the
   cipher suite in use (see {{I-D.ietf-sframe-enc}}).
@@ -342,14 +335,14 @@ encoding the result as a big-endian integer of length `AEAD.Nn`.
 The payload field from the MOQT object is used by the AEAD
 algorithm for the plaintext.
 
-The encryptor forms an SecObj header using the KID value provided.
+The encryptor forms an SecObj header using the Key ID value provided.
 
 The encryption procedure is as follows:
 
 1. From the MOQT Object obtain MOQT object payload as the plaintext to
    encrypt. Get the GroupId and ObjectId from the MOQT object envelope.
 
-2. Retrieve the `moq_key` and `moq_salt` matching the KID.
+2. Retrieve the `moq_key` and `moq_salt` matching the Key ID.
 
 3. Form the aad input as described in {{aad}}.
 
@@ -358,56 +351,56 @@ The encryption procedure is as follows:
 5. Apply the AEAD encryption function with moq_key, nonce, aad and
    object payload as inputs.
 
-6. Add the KID value to `KID Object Header Extension`.
+6. Add the Key ID value to `Key ID Object Header Extension`.
 
 The final SecureObject is formed from the MOQT transport headers, then
-the KID encdoded as QUIC variale length integer{{!RFC9000}},
- followed by the output of the encryption.
+the Key ID encdoded as QUIC variale length integer{{!RFC9000}},
+followed by the output of the encryption.
 
 ~~~~
-+-----------------+------------------+-----------------+
-|    MOQT Object  |   SecObj Header  |     SecObj      |
-|    Header       | (KID Extension)  |     Ciphertext  |
-+-----------------+------------------+-----------------+
++-----------------+---------------------+-----------------+
+|    MOQT Object  |   SecObj Header     |     SecObj      |
+|    Header       | (Key ID Extension)  |     Ciphertext  |
++-----------------+---------------------+-----------------+
 ~~~~
 
 Below shows psuedocode for the encryption process.
 
 ~~~ pseudocode
-def encrypt(full_track_name, kid, object):
+def encrypt(full_track_name, key_id, object):
     # Identify the appropriate encryption context
     ctx = context_for_track(full_track_name)
-    moq_key, moq_salt = ctx.key_store[kid]
+    moq_key, moq_salt = ctx.key_store[key_id]
 
     # Compute the required CTR parameter
     ctr = encode_ctr(object.group_id, object.object_id)
 
     # Assemble the AAD value
-    aad = encode_aad(kid, ctr, full_track_name)
+    aad = encode_aad(key_id, ctr, full_track_name)
 
     # Perform the AEAD encryption
     nonce = xor(moq_salt, ctr)
     encrypted_payload = AEAD.encrypt(moq_key, nonce, aad, object.payload)
 
     # Assemble the secure object payload
-    (encoded_kid, _) = encode_varint(kid)
+    (encoded_kid, _) = encode_varint(key_id)
     object.payload = encoded_kid + encrypted_payload
 ~~~
 
 
 ## Decryption
 
-For decrypting, the KID field in the secure object payload is used to find the
-right key and salt for the encrypted object, the nonce field is
+For decrypting, the Key ID from the header extension in the secure object is
+used to find the right key and salt for the encrypted object, the nonce field is
 obtained from the `GroupId` and `ObjectId` fields of the MOQT object header.
 
 The decryption procedure is as follows:
 
-1. Parse the SecureObject to obtain KID, the ciphertext corresponding
+1. Parse the SecureObject to obtain Key ID, the ciphertext corresponding
    to MOQT object payload and the GroupID and ObjectId from the MOQT
    object envelope.
 
-2. Retrieve the `moq_key` and `moq_salt` matching the KID.
+2. Retrieve the `moq_key` and `moq_salt` matching the Key ID.
 
 3. Form the aad input as described in {{aad}}.
 
@@ -421,9 +414,9 @@ Below shows psuedocode for the decrpytion process
 
 ~~~ pseudocode
 def decrypt(full_track_name, object):
-    # Parse the secure object payload to obtain key ID and ciphertext
-    (kid, kid_byte_len) = parse_varint(object.payload)
-    ciphertext = object.payload[kid_byte_len:]
+    # Parse the secure object to obtain key ID and ciphertext
+    (kid, kid_byte_len) = (object.headers[kid_extension])
+    ciphertext = object.payload[:]
 
     # Identify the appropriate encryption context for the full track name
     # and the key ID
@@ -442,9 +435,9 @@ def decrypt(full_track_name, object):
 ~~~
 
 
-If a ciphertext fails to decrypt because there is no key available for the KID
+If a ciphertext fails to decrypt because there is no key available for the Key ID
 value presented, the client MAY buffer the ciphertext and retry decryption once
-a key with that KID is received.  If a ciphertext fails to decrypt for any other
+a key with that Key ID is received.  If a ciphertext fails to decrypt for any other
 reason, the client MUST discard the ciphertext. Invalid ciphertexts SHOULD be
 discarded in a way that is indistinguishable (to an external observer) from
 having processed a valid ciphertext.  In other words, the decryption
@@ -458,7 +451,7 @@ performed in the SFrame encryption scheme defined in {{!I-D.ietf-sframe-enc}},
 The scheme in this document is effectively a "virtualized" version of SFrame:
 
 * The CTR value used in nonce formation is not carried in the object payload,
-  but instead synthesized from the group ID and object ID.
+  but instead synthesized from the GroupID and ObjectID.
 
 * The AAD for the AEAD operation is not sent on the wire (as with the SFrame
   Header), but constructed locally by the encrypting and decrypting endpoints.
@@ -468,7 +461,7 @@ The scheme in this document is effectively a "virtualized" version of SFrame:
     * The SFrame Header is constructed using QUIC-style varints, instead of the
       variable-length integer scheme defined in SFrame.
 
-    * The group ID and object ID are sent directly, not as the packed CTR value.
+    * The GroupID and GroupID are sent directly, not as the packed CTR value.
 
 * The `metadata` input in to SFrame operations is defined to be the
   FullTrackName value for the object.
@@ -482,25 +475,20 @@ The SFrame specification lists several things that an application needs to
 account for in order to use SFrame securely, which are all accounted for here:
 
 1. **Header value uniqueness:** Uniqueness of CTR values follows from the
-   uniqueness of MOQT (group ID, object ID) pairs. We only use one KID value, but
+   uniqueness of MOQT (GroupID, ObjectID) pairs. We only use one Key ID value, but
    instead use distinct SFrame contexts with distinct keys per track. This
-   assures that the same (`track_base_key`, KID, CTR) tuple is never used twice.
+   assures that the same (`track_base_key`, Key ID, CTR) tuple is never used twice.
 
 2. **Key management:** We delegate this to the MOQT application, with subject to
    the assumptions described in {{setup-assumptions}}.
 
 3. **Anti-replay:** Replay is not possible within the MOQT framework because of
-   the uniqueness constraints on object IDs and objects, and because the group
+   the uniqueness constraints on ObjectIDs and objects, and because the group
    ID and object ID are cryptographically bound to the secure object payload.
 
 4. **Metadata:** The analogue of the SFrame metadata input is
    defined in {{aad}}.
 
-
-> **NOTE:** It is not clear to me that the anti-replay point actually holds up
-> here, but that is probably just due to the limitations of my understanding of
-> MOQT.  How is a receiver or relay supposed to be have if its next upstream hop
-> sends it multiple values with the same track name, group ID, and object ID?
 
 Any of the SFrame ciphersuites defined in the relevant IANA registry can be used
 to protect MOQT objects.  The caution against short tags in {{Section 7.5 of
@@ -519,12 +507,12 @@ safeguards that make it safer to use short tags, namely:
 
 # IANA Considerations {#iana}
 
-This document defines a new MOQT Object extension header for carrying KID value,
+This document defines a new MOQT Object extension header for carrying Key ID value,
 under the `MOQ Extension Headers` registry.
 
 | Type |                         Value                        |
 | ---- | ---------------------------------------------------- |
-| 0x1  | KID Value - see {{format}}
+| 0x1  | Key ID Value - see {{format}}
 
 
 --- back
