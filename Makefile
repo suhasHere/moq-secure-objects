@@ -1,11 +1,15 @@
-LIBDIR := lib
-include $(LIBDIR)/main.mk
 
-$(LIBDIR)/main.mk:
-ifneq (,$(shell grep "path *= *$(LIBDIR)" .gitmodules 2>/dev/null))
-	git submodule sync
-	git submodule update $(CLONE_ARGS) --init
-else
-	git clone -q --depth 10 $(CLONE_ARGS) \
-	    -b main https://github.com/martinthomson/i-d-template $(LIBDIR)
-endif
+all: draft-jennings-moq-secure-objects.txt
+
+clean:
+	rm -f  draft-jennings-moq-secure-objects.txt  draft-jennings-moq-secure-objects.xml
+
+
+draft-jennings-moq-secure-objects.txt: draft-jennings-moq-secure-objects.xml
+	xml2rfc draft-jennings-moq-secure-objects.xml --text  > draft-jennings-moq-secure-objects.txt
+
+
+draft-jennings-moq-secure-objects.xml: draft-jennings-moq-secure-objects.md
+	kramdown-rfc draft-jennings-moq-secure-objects.md  > draft-jennings-moq-secure-objects.xml
+
+

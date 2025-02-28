@@ -17,7 +17,6 @@
 /versioned/
 Gemfile.lock
 archive.json
-draft-wilaw-moq-catalogformat.xml
+*.xml
 package-lock.json
 report.xml
-!requirements.txtlib
