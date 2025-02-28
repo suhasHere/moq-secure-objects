@@ -512,7 +512,7 @@ under the `MOQ Extension Headers` registry.
 
 | Type |                         Value                        |
 | ---- | ---------------------------------------------------- |
-| 0x1  | Key ID Value - see {{format}}
+| 0x0  | Key ID Value - see {{format}}
 
 
 --- back
