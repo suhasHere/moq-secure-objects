@@ -206,10 +206,17 @@ the Key ID is obtained from the object payload).
 It is also up to the application to specify the ciphersuite to be used for each
 track's encryption context.  Any SFrame ciphersuite can be used.
 
+## Extensions
+
+MoQT defines two types of Object Header Extensions, public and immutable.  The
+immutable extensions are included in the authenticated metadata.  This specification
+adds private Object Header Extensions.  These extensions are serialized and encrypted
+along with the object payload, and decrypted and decoded by the receiver.
+
 ## Secure Object Format {#format}
 
-The payload of a secure object comprises an AEAD-encrypted object payload, with
-object header extension that specifies the Key ID in use.
+The payload of a secure object comprises an AEAD-encrypted object payload, prefixed
+by a variable length integer specifying the Key ID in use.
 
 ~~~ pseudocode
 SECURE_OBJECT {
@@ -259,6 +266,7 @@ SECURE_OBJECT_AAD {
     Object ID (i),
     Track Namespace (tuple),
     Track Name (b),
+    Serialized Immutable Extensions (b)
 }
 ~~~
 
@@ -348,10 +356,10 @@ The encryption procedure is as follows:
 
 4. Form the nonce by as described in {{nonce}}.
 
-5. Apply the AEAD encryption function with moq_key, nonce, aad and
-   object payload as inputs.
+5. Apply the AEAD encryption function with moq_key, nonce, aad,
+   serialized private extensions and object payload as inputs.
 
-6. Add the Key ID value to `Key ID Object Header Extension`.
+7. Add the Key ID value to `Key ID Object Header Extension`.
 
 The final SecureObject is formed from the MOQT transport headers, then
 the Key ID encdoded as QUIC variale length integer{{!RFC9000}},
@@ -376,11 +384,15 @@ def encrypt(full_track_name, key_id, object):
     ctr = encode_ctr(object.group_id, object.object_id)
 
     # Assemble the AAD value
-    aad = encode_aad(key_id, ctr, full_track_name)
+    aad = encode_aad(
+              key_id, ctr, full_track_name,
+              object.serialized_immutable_extensions)
 
     # Perform the AEAD encryption
     nonce = xor(moq_salt, ctr)
-    encrypted_payload = AEAD.encrypt(moq_key, nonce, aad, object.payload)
+    plaintext = encode_private_extensions(object.private_extensions) +
+        object.payload
+    encrypted_payload = AEAD.encrypt(moq_key, nonce, aad, plaintext)
 
     # Assemble the secure object payload
     (encoded_kid, _) = encode_varint(key_id)
@@ -409,6 +421,9 @@ The decryption procedure is as follows:
 5. Apply the AEAD decryption function with moq_key, nonce, aad and
    ciphertext as inputs.
 
+6. Decode the private extension headers, returning both the headers and
+   the object payload.
+
 
 Below shows psuedocode for the decrpytion process
 
@@ -431,7 +446,8 @@ def decrypt(full_track_name, object):
 
     # Perform the AEAD decryption
     nonce = xor(moq_salt, ctr)
-    object.payload = AEAD.decrypt(moq_key, nonce, aad, ciphertext)
+    plaintext = AEAD.decrypt(moq_key, nonce, aad, ciphertext)
+    object.private_extensions, object.payload = decode_plaintext(plaintext)
 ~~~
 
 
@@ -443,6 +459,8 @@ discarded in a way that is indistinguishable (to an external observer) from
 having processed a valid ciphertext.  In other words, the decryption
 operation should take the same amount of time regardless of whether decryption
 succeeds or fails.
+
+TODO: how to handle errors deserializing private extensions?
 
 # Security Considerations {#security}
 
