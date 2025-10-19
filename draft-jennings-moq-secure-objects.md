@@ -36,6 +36,7 @@ normative:
 
   MoQ-TRANSPORT: I-D.draft-ietf-moq-transport
   QUIC: RFC9000
+  SFRAME: RFC9605
 
 informative:
 
@@ -79,7 +80,7 @@ for E2EE security.
 
 This document defines a scheme for E2E authenticated encryption of MOQT objects.
 This scheme is based on the SFrame mechanism for authenticated encryption of
-media objects {{!I-D.ietf-sframe-enc}}.
+media objects {{SFRAME}}.
 
 However, a secondary goal of this design is to minimize the amount of additional
 data the encryptions requires for each object. This is particularly important
@@ -140,7 +141,7 @@ Serialized Object Name = Serialized Full Track Name + Serialize(Group ID) + Seri
 where, Serialized Full Track Name is defined in {{ftn}}, and `Serialize` operation
 encodes Group ID and Object ID as {{RFC9000}} variable length integers.
 
-The `+` representations concatenation of byte strings,
+The `+` representations concatenation of byte strings.
 
 
 # MOQT Object Model Recap {#moqt}
@@ -297,10 +298,13 @@ extension` containing the Key ID.
 
 ## Nonce Formation {#nonce}
 
-This specifiction proposes using `Serialized Object Name` ({{obj-name}}) as
-input to nonce formation as it uniquely identifies a MOQT Object. The
-`Serialized Object Name` is used for a counter which is XORed with a salt
-to form the nonce used in AEAD encryption.
+The Group ID and Object ID for an object are used to form a 96-bit counter (CTR)
+value, which XORed with a salt to form the nonce used in AEAD encryption.  The
+counter value is formed by bitwise concatenating the  Group ID as 64 bit integer
+and  Object ID as 32 bit integer. This scheme MUST NOT be applied to an object
+where group ID is larger than 2<sup>64</sup> or the object ID is larger
+than 2<sup>32</sup>.
+
 
 ## Key Derivation {#keys}
 
@@ -309,12 +313,11 @@ associated with a Key ID. Given a `track_base_key` value, the key and salt are
 derived using HMAC-based Key Derivation Function (HKDF) {{!RFC5869}} as follows:
 
 ~~~ pseudocode
-def derive_key_salt(Key ID, track_base_key):
+def derive_key_salt(Key ID, track_base_key, Serialized Full Track Name):
   moq_secret = HKDF-Extract("", track_base_key)
-  moq_key_label = "MOQ 1.0 Secret key " + Key ID + cipher_suite
+  moq_key_label = "MOQ 1.0 Secret key " + Key ID + Serialized Full Track Name + cipher_suite
   moq_key =
     HKDF-Expand(moq_secret, moq_key_label, AEAD.Nk)
-
   moq_salt_label = "MOQ 1.0 Secret salt " + Key ID + cipher_suite
   moq_salt =
     HKDF-Expand(moq_secret, moq_salt_label, AEAD.Nn)
@@ -329,7 +332,7 @@ In the derivation of `moq_secret`:
 * The Key ID value is encoded as an 8-byte big-endian integer.
 
 * The `cipher_suite` value is a 2-byte big-endian integer representing the
-  cipher suite in use (see {{I-D.ietf-sframe-enc}}).
+  cipher suite in use (see {{SFRAME}}).
 
 The hash function used for HKDF is determined by the cipher suite in use.
 
@@ -368,7 +371,7 @@ followed by the output of the encryption.
 ## Decryption
 
 For decrypting, the Key ID from the `Secure Object KID` header extension
-contianed within immutable header extension is
+contained within immutable header extension is
 used to find the right key and salt for the encrypted object. The MOQT
 track information matching the Key ID along with  `Group ID` and `Object ID`
 fields of the MOQT object header are used to form the nonce.
@@ -435,7 +438,7 @@ Private Extensions {
 # Security Considerations {#security}
 
 The cryptographic computations described in this document are exactly those
-performed in the SFrame encryption scheme defined in {{!I-D.ietf-sframe-enc}},
+performed in the SFrame encryption scheme defined in {{SFRAME}},
 The scheme in this document is effectively a "virtualized" version of SFrame:
 
 * The CTR value used in nonce formation is not carried in the object payload,
@@ -479,9 +482,9 @@ account for in order to use SFrame securely, which are all accounted for here:
 
 
 Any of the SFrame ciphersuites defined in the relevant IANA registry can be used
-to protect MOQT objects.  The caution against short tags in {{Section 7.5 of
-I-D.ietf-sframe-enc}} still applies here, but the MOQT environment provides some
-safeguards that make it safer to use short tags, namely:
+to protect MOQT objects.  The caution against short tags in {{Section 7.5 of SFRAME}}
+still applies here, but the MOQT environment provides some safeguards that make
+it safer to use short tags, namely:
 
 * MOQT has hop-by-hop protections provided by the underlying QUIC layer, so a
   brute-force attack could only be mounted by a relay.
