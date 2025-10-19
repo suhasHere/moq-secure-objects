@@ -126,7 +126,13 @@ Serialized Full Track Name = Serialize(Track Namespace) +  Serialize(Track Name)
 
 The `Serialize` operation follows the same on-the-wire
 encoding for Track Name Space and Track Name as defined in Section 2.4.1 of
-MOQTransport.
+MOQTransport. This implies that the serialiaztion of Track Namespace tuples
+will start with varint encoded count of tuples. This is followed by encoding
+corresponding to each tuple. Each tuple's encoding starts with
+varint encoded length prefix for the count of bytes, followed by bytes
+representing the content of the tuple. The Track Name is length prefixed
+sequence of bytes that identifies an individual track within the namespace.
+
 
 The `+` representations concatenation of byte strings.
 
@@ -248,7 +254,6 @@ of the Object).
 It is also up to the application to specify the ciphersuite to be used for each
 track's encryption context.  Any SFrame ciphersuite can be used.
 
-
 ## Encryption Schema
 
 MOQT secure object protection relies on an SFrame cipher suite to define the
@@ -272,6 +277,18 @@ will refer to the following aspects of the AEAD and the hash algorithm below:
   algorithm
 
 * `Hash.Nh` - The size in bytes of the output of the hash function
+
+## Application Execution
+
+This section provides an overview for applications over MOQT to
+use mechanisms defined in this specification
+
+### Encryption
+
+To encrypt a MOQT Object, the application prepares folo
+
+### Decryption
+
 
 ## Metadata Authentication {#aad}
 
