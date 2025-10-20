@@ -336,9 +336,10 @@ SECURE_OBJECT_AAD {
     Key ID (i),
     Group ID (i),
     Object ID (i),
-    Track Namespace (tuple),
-    Track Name (b),
-    Serialized Immutable Extensions (b)
+    Track Namespace (..),
+    Track Name Length (i),
+    Track Name (..),
+    Serialized Immutable Extensions (..)
 }
 ~~~
 
