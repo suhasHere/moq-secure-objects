@@ -89,6 +89,10 @@ increase overall bandwidth usage by a significant percentage.  To minimize the
 overhead added by end-to-end encryption, certain fields that would be redundant
 between MOQT and SFrame are not transmitted.
 
+The encryption mechanism defined in this specification restricts
+MOQT Object ID that fit in 32 bit integers inspite of MOQT specification
+allowing Object IDs upto 2<sup>62</sup> values.
+
 ## Terminology
 
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
@@ -97,13 +101,14 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
 {{!RFC2119}} {{!RFC8174}} when, and only when, they appear in all
 capitals, as shown here.
 
-This document re
-
 E2EE:
 : End to End Encryption
 
 HBH:
 : Hop By Hop
+
+varint:
+: {{RFC9000}} variable length integer, section 1.3
 
 ## Notational Conventions
 
@@ -126,28 +131,19 @@ Serialized Full Track Name = Serialize(Track Namespace) +  Serialize(Track Name)
 
 The `Serialize` operation follows the same on-the-wire
 encoding for Track Name Space and Track Name as defined in Section 2.4.1 of
-MOQTransport. This implies that the serialiaztion of Track Namespace tuples
-will start with varint encoded count of tuples. This is followed by encoding
+{{MoQ-TRANSPORT}}.
+
+This mandates that the serialization of Track Namespace tuples
+starts with varint encoded count of tuples. This is followed by encoding
 corresponding to each tuple. Each tuple's encoding starts with
-varint encoded length prefix for the count of bytes, followed by bytes
-representing the content of the tuple. The Track Name is length prefixed
-sequence of bytes that identifies an individual track within the namespace.
+varint encoded length for the count of bytes and  bytes
+representing the content of the tuple.
+
+The Track Name is varint encoded length followed by sequence of bytes that
+identifies an individual track within the namespace.
 
 
-The `+` representations concatenation of byte strings.
-
-### Serialized Object Name {#obj-name}
-
-This specifcation defines `Serialized Object Name` as:
-
-~~~
-Serialized Object Name = Serialized Full Track Name + Serialize(Group ID) + Serialize(Object ID)
-~~~
-
-where, Serialized Full Track Name is defined in {{ftn}}, and `Serialize` operation
-encodes Group ID and Object ID as {{RFC9000}} variable length integers.
-
-The `+` representations concatenation of byte strings.
+The `+` representation concatenation of byte strings.
 
 
 # MOQT Object Model Recap {#moqt}
@@ -211,7 +207,8 @@ variable length integers called GroupID and ObjectID respectively.
 
 Two important properties of objects are:
 
-1. ObjectNames {{obj-name}} are globally unique in a given relay network.
+1. The combination of Track Namespace, Track Name, Group ID and Object ID are
+   globally unique in a given relay network.
 
 2. The data inside an MOQT Object (and its size) can never change after the
 Object is first published. There can never be two Objects with the same
@@ -224,22 +221,22 @@ qualified domain names or UUIDs as part of the TrackNamespace.
 
 Section 10.2.1 {{{MoQ-TRANSPORT}} defines fields of a canonical
 MOQT Object. The protection scheme defined in this draft encrypts the
-`Object Payload` and authenticates the  `Group ID`, `Object ID`, `Immutable
-Header Extensions` (Section 11.2 of {{{MoQ-TRANSPORT}} }}, if any
-and `Object Payload` fields, regardless of the on-the-wire encoding of the
-objects over QUIC Datagrams or QUIC streams.
+`Object Payload` and Private header extensions. The scheme authenticates
+the  `Group ID`, `Object ID`, `Immutable Header Extensions`
+(Section 11.2 of {{{MoQ-TRANSPORT}} }} and `Object Payload` fields,
+regardless of the on-the-wire encoding of the objects over QUIC Datagrams or
+QUIC streams.
 
 
 ## Extensions
 
-MOQT defines two types of Object Header Extensions, public and immutable. The
-immutable extensions are included in the authenticated metadata. This specification
-adds Private Object header extension (see {{pvt-ext}}). This
-extension is serialized and encrypted along with the Object payload,
-decrypted and decoded by the receiver. This specification further defines
-`Secure Object KID` extension (see {{keyid-ext}}), which is contained
-within the immutable extensions.
-
+MOQT defines two types of Object Header Extensions, public (or mutable) and
+immutable. The immutable extensions are included in the authenticated
+metadata. This specification adds Private Object header extension
+(see {{pvt-ext}}). This extension is serialized and encrypted along with
+the Object payload, decrypted and decoded by the receiver. This specification
+further defines `Secure Object KID` extension (see {{keyid-ext}}),
+which is contained within the immutable extensions.
 
 ## Setup Assumptions
 
@@ -247,12 +244,58 @@ We assume that the application assigns each track a set of (Key ID, `track_base_
 tuples, where each `track_base_key` is known only to authorized original publishers
 and end subscribers for a given track. How these per-track secrets are established
 is outside the scope of this specification. We also assume that the application
-defines which Key ID should be used for a given encryption operation (For decryption,
-the Key ID is obtained from the `Secure Object KID``immutable header extension
-of the Object).
+defines which Key ID should be used for a given encryption operation.
+For decryption, the Key ID is obtained from the `Secure Object KID` header
+extension that is contained with in the immutable header extension of the
+Object).
 
 It is also up to the application to specify the ciphersuite to be used for each
 track's encryption context.  Any SFrame ciphersuite can be used.
+
+## Application Procedure {#app}
+
+This section provides steps for applications over MOQT to
+use mechanisms defined in this specification.
+
+To encrypt a MOQT Object, the application prepares following to
+produce the plaintext input:
+
+Call the MOQT Object's payload as `original_payload`.
+
+pt = Serialize(original_payload) + Serialize(Private header extensions)
+
+The serialization for Private header extensions follows the rules defined in
+section 10.2.1.2 of {{MoQ-TRANSPORT}}. The serialzation of the MOQT Object
+Payload, i.e `original_payload`, has varint encoded length for count
+of bytes in the payload followed by sequence of bytes for the contents
+of the payload.
+
+The output of the encrypt operation is a chiphertext which is set as
+the payload for the MOQT Object, thus replacing the `original_payload`.
+The length of the ciphertext now reflects length of `original_payload` as well
+as the private header extensions.
+
+To decrypt a MOQT Object, the Object payload is provided as ciphertext input, to
+obtain the plaintext. Applications de-serialize the plaintext to extract
+private header extensions and the serialized application payload.
+
+Following steps are performed. Let's call MOQT Object payload as `input_payload`.
+
+- Read varint corresponding to obtain length.
+
+- Read sequence of bytes corresponding to length computed above, call it `output_payload`.
+
+- If there exists no more data, this is the case of zero private header extensions.
+  So return an empty private extension stucture by setting Type to 0xA and
+  length to 0 and  MOQT Object after updating the `input_payload` and its
+  length to the output_payload.
+
+- Else, read 16 bits and if its value doesn't match 0XA, drop the incoming object, else
+  parse the rest of bits as Private header extension. Finally return
+  parsed private extensions and MOQT object after updating the
+  `input_payload` and its length to the `output_payload`.
+
+If parsing fails at any stage, drop the received MOQT Object.
 
 ## Encryption Schema
 
@@ -277,17 +320,6 @@ will refer to the following aspects of the AEAD and the hash algorithm below:
   algorithm
 
 * `Hash.Nh` - The size in bytes of the output of the hash function
-
-## Application Execution
-
-This section provides an overview for applications over MOQT to
-use mechanisms defined in this specification
-
-### Encryption
-
-To encrypt a MOQT Object, the application prepares folo
-
-### Decryption
 
 
 ## Metadata Authentication {#aad}
@@ -332,10 +364,10 @@ derived using HMAC-based Key Derivation Function (HKDF) {{!RFC5869}} as follows:
 ~~~ pseudocode
 def derive_key_salt(Key ID, track_base_key, Serialized Full Track Name):
   moq_secret = HKDF-Extract("", track_base_key)
-  moq_key_label = "MOQ 1.0 Secret key " + Key ID + Serialized Full Track Name + cipher_suite
+  moq_key_label = "MOQ 1.0 Secret key " + Serialized Full Track Name + cipher_suite + Key ID
   moq_key =
     HKDF-Expand(moq_secret, moq_key_label, AEAD.Nk)
-  moq_salt_label = "MOQ 1.0 Secret salt " + Key ID + cipher_suite
+  moq_salt_label = "MOQ 1.0 Secret salt " + Serialized Full Track Name + cipher_suite + Key ID
   moq_salt =
     HKDF-Expand(moq_secret, moq_salt_label, AEAD.Nn)
 
@@ -368,10 +400,10 @@ The encryptor forms an SecObj header using the Key ID value provided.
 
 The encryption procedure is as follows:
 
-1. From the MOQT Object obtain MOQT Object payload as the plaintext to
-   encrypt. Get the Group ID, Object ID and Serialized Immutable header
-   extension containing the  `Secure Object KID` object Header extension
-   with Key ID as the value  added, from the MOQT object envelope.
+1. Obtain the plaintext payload to encrypt from the MOQT object. Extract
+   the Group ID, Object ID, and the Serialized Immutable Header Extension from
+   the MOQT object envelope. Ensure the Secure Object KID header extension is
+   included, with the Key ID set as its value.
 
 2. Retrieve the `moq_key` and `moq_salt` matching the Key ID.
 
@@ -380,7 +412,7 @@ The encryption procedure is as follows:
 4. Form the nonce by as described in {{nonce}}.
 
 5. Apply the AEAD encryption function with moq_key, nonce, aad,
-   serialized private extensions and object payload as inputs.
+   MOQT Object payload and serialized private header exntenions as inputs (see {{app}}).
 
 The final SecureObject is formed from the MOQT transport headers,
 followed by the output of the encryption.
@@ -412,7 +444,8 @@ The decryption procedure is as follows:
    the object payload.
 
 If extracting Key ID fails either due to missing `Secure Object KID` extension
-or error from parsing,the client MUST distract the MOQT Object.
+within immutable haeader extension or error from parsing, the client MUST
+discard the received MOQT Object.
 
 If a ciphertext fails to decrypt because there is no key available for the Key ID
 value presented, the client MAY buffer the ciphertext and retry decryption once
@@ -432,7 +465,7 @@ Key ID  (Extension Header Type 0x2) is a variable length integer and
 identifies the keying material ( keys, nonces and associated context
 for the MOQT Track) to be used for a given MOQT track.
 
-The Key ID extension is included within Immutable Header extension.
+The Key ID extension is included within the Immutable Header extension.
 All objects encoded MUST include the Key ID header extension when
 using this specification for object encryption.
 
