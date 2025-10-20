@@ -351,7 +351,7 @@ extension` containing the Key ID.
 The Group ID and Object ID for an object are used to form a 96-bit counter (CTR)
 value, which XORed with a salt to form the nonce used in AEAD encryption.  The
 counter value is formed by bitwise concatenating the  Group ID as 64 bit integer
-and  Object ID as 32 bit integer. This encryption/dectrpytion  will fail
+and  Object ID as 32 bit integer. This encryption/decryption  will fail
 if applied to an object where group ID is larger than 2<sup>64</sup> or
 the object ID is larger than 2<sup>32</sup> and the MOQT Object MUST NOT
 be processed further.
