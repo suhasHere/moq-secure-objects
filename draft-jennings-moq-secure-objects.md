@@ -236,25 +236,25 @@ QUIC streams.
 ## Extensions
 
 MOQT defines two types of Object Header Extensions, public (or mutable) and
-immutable. The immutable extensions are included in the authenticated
-metadata. This specification adds Private Object header extension
-(see {{pvt-ext}}). This extension is serialized and encrypted along with
-the Object payload, decrypted and decoded by the receiver. This specification
+immutable. This specification uses MOQT immutable extensions are to convey
+authenticated metadata and adds Private Object header extensions
+(see {{pvt-ext}}). Private extensions are serialized and encrypted along with
+the Object payload, decrypted and deserialized by the receiver. This specification
 further defines `Secure Object KID` extension (see {{keyid-ext}}),
-which is contained within the immutable extensions.
+which is transmitted within the immutable extensions.
 
 ## Setup Assumptions
 
-We assume that the application assigns each track a set of (Key ID, `track_base_key`)
+The application assigns each track a set of (Key ID, `track_base_key`)
 tuples, where each `track_base_key` is known only to authorized original publishers
 and end subscribers for a given track. How these per-track secrets are established
-is outside the scope of this specification. We also assume that the application
+is outside the scope of this specification. The application also
 defines which Key ID should be used for a given encryption operation.
 For decryption, the Key ID is obtained from the `Secure Object KID` header
 extension that is contained with in the immutable header extension of the
 Object).
 
-It is also up to the application to specify the ciphersuite to be used for each
+Applications determine the ciphersuite to be used for each
 track's encryption context.  Any SFrame ciphersuite can be used.
 
 ## Application Procedure {#app}
@@ -262,33 +262,44 @@ track's encryption context.  Any SFrame ciphersuite can be used.
 This section provides steps for applications over MOQT to
 use mechanisms defined in this specification.
 
-To encrypt a MOQT Object, the application prepares following to
+### Object Encryption
+
+To encrypt a MOQT Object, the application performs the following to
 produce the plaintext input:
 
 Call the MOQT Object's payload as `original_payload`.
 
-pt = Serialize(original_payload) + Serialize(Private header extensions)
+`pt = Serialize(original_payload) + Serialize(Private header extensions)`
 
 The serialization for Private header extensions follows the rules defined in
 section 10.2.1.2 of {{MoQ-TRANSPORT}}. The serialzation of the MOQT Object
-Payload, i.e `original_payload`, has varint encoded length for count
-of bytes in the payload followed by sequence of bytes for the contents
-of the payload.
+Payload, i.e `original_payload`, has varint encoded count
+of the bytes in the payload followed by the original_payload bytes.
+
+`MOQT Object Payload = encrypt(pt)`
 
 The output of the encrypt operation is a chiphertext which is set as
 the payload for the MOQT Object, thus replacing the `original_payload`.
-The length of the ciphertext now reflects length of `original_payload` as well
-as the private header extensions.
+The length of the ciphertext now reflects the encrypted length of
+`original_payload` as well as the private header extensions.
+
+### Object Decryption
 
 To decrypt a MOQT Object, the Object payload is provided as ciphertext input, to
-obtain the plaintext. Applications de-serialize the plaintext to extract
-private header extensions and the serialized application payload.
+obtain the plaintext. Applications deserialize the plaintext to extract
+private header extensions and the application's `original_payload`.
 
-Following steps are performed. Let's call MOQT Object payload as `input_payload`.
+The following deserialization steps are performed:
 
-- Read varint corresponding to obtain length.
+Let `input_payload` be the decrypted MOQT Object Payload.
 
-- Read sequence of bytes corresponding to length computed above, call it `output_payload`.
+1. original_payload_length = read_varint(input_payload)
+2. original_payload = read_bytes(input_payload, original_payload_length)
+
+
+- Read varint to obtain the `original_payload` length.
+
+- Read `original_payload` length bytes, call it `output_payload`.
 
 - If there exists no more data, this is the case of zero private header extensions.
   So return an empty private extension stucture by setting Type to 0xA and
@@ -347,6 +358,8 @@ SECURE_OBJECT_AAD {
     Serialized Immutable Extensions (..)
 }
 ~~~
+
+* Track Namespace is serialized as in section 2.4.1 of MOQT.
 
 Serialized Immutable Extensions MUST include the `Secure Object KID header
 extension` containing the Key ID.
@@ -468,7 +481,7 @@ succeeds or fails.
 ## Key ID Extension {#keyid-ext}
 
 Key ID  (Extension Header Type 0x2) is a variable length integer and
-identifies the keying material ( keys, nonces and associated context
+identifies the keying material (keys, nonces and associated context
 for the MOQT Track) to be used for a given MOQT track.
 
 The Key ID extension is included within the Immutable Header extension.
@@ -489,7 +502,6 @@ Private Extensions {
   Key-Value-Pair (..) ...
 }
 ~~~
-
 
 # Security Considerations {#security}
 
