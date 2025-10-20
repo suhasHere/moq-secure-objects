@@ -94,9 +94,8 @@ increase overall bandwidth usage by a significant percentage.  To minimize the
 overhead added by end-to-end encryption, certain fields that would be redundant
 between MOQT and SFrame are not transmitted.
 
-The encryption mechanism defined in this specification restricts
-MOQT Object ID that fit in 32 bit integers inspite of MOQT specification
-allowing Object IDs upto 2<sup>62</sup> values.
+The encryption mechanism defined in this specification can only be used
+in application context where object IDs never more than 32 bits long.
 
 ## Terminology
 
@@ -113,16 +112,12 @@ HBH:
 : Hop By Hop
 
 varint:
-: {{RFC9000}} variable length integer, section 1.3
+: {{QUIC}} variable length integer, section 1.3
 
 ## Notational Conventions
 
-This document uses the conventions detailed in ({{?RFC9000, Section 1.3}})
+This document uses the conventions detailed in ({{QUIC}} Section 1.3)
 when describing the binary encoding.
-
-To reduce unnecessary use of bandwidth, variable length integers SHOULD
-be encoded using the least number of bytes possible to represent the
-required value.
 
 
 ### Serialized Full Track Name {#ftn}
@@ -148,7 +143,7 @@ The Track Name is varint encoded length followed by sequence of bytes that
 identifies an individual track within the namespace.
 
 
-The `+` representation concatenation of byte strings.
+The `+` represents concatenation of byte strings.
 
 
 # MOQT Object Model Recap {#moqt}
@@ -237,7 +232,7 @@ QUIC streams.
 
 MOQT defines two types of Object Header Extensions, public (or mutable) and
 immutable. The immutable extensions are included in the authenticated
-metadata. This specification adds Private Object header extension
+metadata. This specification adds Private header extension
 (see {{pvt-ext}}). This extension is serialized and encrypted along with
 the Object payload, decrypted and decoded by the receiver. This specification
 further defines `Secure Object KID` extension (see {{keyid-ext}}),
@@ -356,10 +351,10 @@ extension` containing the Key ID.
 The Group ID and Object ID for an object are used to form a 96-bit counter (CTR)
 value, which XORed with a salt to form the nonce used in AEAD encryption.  The
 counter value is formed by bitwise concatenating the  Group ID as 64 bit integer
-and  Object ID as 32 bit integer. This scheme MUST NOT be applied to an object
-where group ID is larger than 2<sup>64</sup> or the object ID is larger
-than 2<sup>32</sup>.
-
+and  Object ID as 32 bit integer. This encryption/decryption  will fail
+if applied to an object where group ID is larger than 2<sup>64</sup> or
+the object ID is larger than 2<sup>32</sup> and the MOQT Object MUST NOT
+be processed further.
 
 ## Key Derivation {#keys}
 
@@ -368,12 +363,12 @@ associated with a Key ID. Given a `track_base_key` value, the key and salt are
 derived using HMAC-based Key Derivation Function (HKDF) {{!RFC5869}} as follows:
 
 ~~~ pseudocode
-def derive_key_salt(Key ID, track_base_key, Serialized Full Track Name):
+def derive_key_salt(key_id, track_base_key, serialized_full_track_name):
   moq_secret = HKDF-Extract("", track_base_key)
-  moq_key_label = "MOQ 1.0 Secret key " + Serialized Full Track Name + cipher_suite + Key ID
+  moq_key_label = "MOQ 1.0 Secret key " + serialized_full_track_name + cipher_suite + key_id
   moq_key =
     HKDF-Expand(moq_secret, moq_key_label, AEAD.Nk)
-  moq_salt_label = "MOQ 1.0 Secret salt " + Serialized Full Track Name + cipher_suite + Key ID
+  moq_salt_label = "MOQ 1.0 Secret salt " + serialized_full_track_name + cipher_suite + key_id
   moq_salt =
     HKDF-Expand(moq_secret, moq_salt_label, AEAD.Nn)
 
