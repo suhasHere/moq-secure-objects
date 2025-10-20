@@ -119,10 +119,6 @@ varint:
 This document uses the conventions detailed in ({{QUIC}} Section 1.3)
 when describing the binary encoding.
 
-To reduce unnecessary use of bandwidth, variable length integers SHOULD
-be encoded using the least number of bytes possible to represent the
-required value.
-
 
 ### Serialized Full Track Name {#ftn}
 
@@ -236,7 +232,7 @@ QUIC streams.
 
 MOQT defines two types of Object Header Extensions, public (or mutable) and
 immutable. The immutable extensions are included in the authenticated
-metadata. This specification adds Private Object header extension
+metadata. This specification adds Private header extension
 (see {{pvt-ext}}). This extension is serialized and encrypted along with
 the Object payload, decrypted and decoded by the receiver. This specification
 further defines `Secure Object KID` extension (see {{keyid-ext}}),
@@ -355,9 +351,10 @@ extension` containing the Key ID.
 The Group ID and Object ID for an object are used to form a 96-bit counter (CTR)
 value, which XORed with a salt to form the nonce used in AEAD encryption.  The
 counter value is formed by bitwise concatenating the  Group ID as 64 bit integer
-and  Object ID as 32 bit integer. This scheme MUST NOT be applied to an object
-where group ID is larger than 2<sup>64</sup> or the object ID is larger
-than 2<sup>32</sup>.
+and  Object ID as 32 bit integer. This encryption/dectrpytion  will fail
+if applied to an object where group ID is larger than 2<sup>64</sup> or
+the object ID is larger than 2<sup>32</sup> and the MOQT Object MUST NOT
+be processed further.
 
 ## Key Derivation {#keys}
 
