@@ -33,12 +33,17 @@ author:
 
 
 normative:
-
   MoQ-TRANSPORT: I-D.draft-ietf-moq-transport
   QUIC: RFC9000
   SFRAME: RFC9605
 
 informative:
+  CIPHERS:
+    title: SFrame Cipher Suites
+    author:
+    - org: IANA
+    date: false
+    target: https://www.iana.org/assignments/sframe/sframe.xhtml#sframe-cipher-suites
 
 --- abstract
 
@@ -218,11 +223,11 @@ qualified domain names or UUIDs as part of the TrackNamespace.
 
 # Secure Objects
 
-Section 10.2.1 {{{MoQ-TRANSPORT}} defines fields of a canonical
+Section 10.2.1 {{MoQ-TRANSPORT}} defines fields of a canonical
 MOQT Object. The protection scheme defined in this draft encrypts the
 `Object Payload` and Private header extensions. The scheme authenticates
 the  `Group ID`, `Object ID`, `Immutable Header Extensions`
-(Section 11.2 of {{{MoQ-TRANSPORT}} }} and `Object Payload` fields,
+(Section 11.2 of {{MoQ-TRANSPORT}} }} and `Object Payload` fields,
 regardless of the on-the-wire encoding of the objects over QUIC Datagrams or
 QUIC streams.
 
@@ -530,7 +535,7 @@ account for in order to use SFrame securely, which are all accounted for here:
    defined in {{aad}}.
 
 
-Any of the SFrame ciphersuites defined in the relevant IANA registry can be used
+Any of the SFrame ciphersuites defined in the IANA SFrame Cipher Suites registry {{CIPHERS}} can be used
 to protect MOQT objects.  The caution against short tags in {{Section 7.5 of SFRAME}}
 still applies here, but the MOQT environment provides some safeguards that make
 it safer to use short tags, namely:
@@ -562,5 +567,3 @@ under the `MOQ Extension Headers` registry.
 
 Thanks to Alan Frindell for providing text on adding private
 extensions.
-
-
