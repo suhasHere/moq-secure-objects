@@ -74,7 +74,7 @@ store and forward functions.
 
 As such, two layers of security are required:
 
-1. Hop-by-hop (HBH) security between two MOQT relays
+1. Hop-by-hop (HBH) security between two MOQT endpoints.
 
 2. End-to-end (E2E) security from the Original Publisher of an MOQT object to End
    Subscribers
@@ -95,7 +95,7 @@ overhead added by end-to-end encryption, certain fields that would be redundant
 between MOQT and SFrame are not transmitted.
 
 The encryption mechanism defined in this specification can only be used
-in application context where object IDs never more than 32 bits long.
+in application context where object ID values are never more than 32 bits long.
 
 ## Terminology
 
@@ -143,7 +143,7 @@ The Track Name is varint encoded length followed by sequence of bytes that
 identifies an individual track within the namespace.
 
 
-The `+` represents concatenation of byte strings.
+The `+` represents concatenation of byte sequences.
 
 
 # MOQT Object Model Recap {#moqt}
