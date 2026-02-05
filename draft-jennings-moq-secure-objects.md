@@ -208,14 +208,15 @@ variable length integers called GroupID and ObjectID respectively.
 Two important properties of objects are:
 
 1. The combination of Track Namespace, Track Name, Group ID and Object ID are
-   globally unique in a given relay network.
+globally unique in a given relay network, referred to as Full Object ID
+in this specification.
 
 2. The data inside an MOQT Object (and its size) can never change after the
 Object is first published. There can never be two Objects with the same
-name but different data.
+Full Object ID but different data.
 
-One of the ways system keep the Object names unique is by using a fully
-qualified domain names or UUIDs as part of the TrackNamespace.
+One of the ways system keep the Full Object IDs unique is by using a fully
+qualified domain names or UUIDs as part of the Track Namespace.
 
 # Secure Objects
 
