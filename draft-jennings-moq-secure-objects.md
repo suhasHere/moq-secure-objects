@@ -36,6 +36,7 @@ normative:
   MoQ-TRANSPORT: I-D.draft-ietf-moq-transport
   QUIC: RFC9000
   SFRAME: RFC9605
+  AEAD-LIMITS: I-D.draft-irtf-cfrg-aead-limits
 
 informative:
   CIPHERS:
@@ -222,18 +223,51 @@ qualified domain names or UUIDs as part of the Track Namespace.
 
 Section 10.2.1 {{MoQ-TRANSPORT}} defines fields of a canonical
 MoQT Object. The protection scheme defined in this draft encrypts the
-`Object Payload` and Private header extensions. The scheme authenticates
-the  `Group ID`, `Object ID`, `Immutable Header Extensions`
-(Section 11.2 of {{MoQ-TRANSPORT}} }} and `Object Payload` fields,
-regardless of the on-the-wire encoding of the objects over QUIC Datagrams or
-QUIC streams.
+`Object Payload` and Private header extensions {{pvt-ext}}.
+The scheme authenticates the  `Group ID`, `Object ID`,
+`Immutable Header Extensions` (Section 11.2 of {{MoQ-TRANSPORT}} }}
+and `Object Payload` fields, regardless of the on-the-wire encoding of the
+objects over QUIC Datagrams or QUIC streams.
 
+~~~ aasvg
+
++==================================================================+
+|                    MoQT Secure Object.                           |
++==================================================================+
+|                                                                  |
+|  +------------------------------------------------------------+  |
+|  |  Track Namespace, Track Name, Mutable Extensions           |  |
+|  |                                                            |  |
+|  |              [ PLAINTEXT / HBH Protected ]                 |  |
+|  +------------------------------------------------------------+  |
+|                                                                  |
+|  +------------------------------------------------------------+  |
+|  |  Group ID, Object ID, Immutable Header Extensions          |  |
+|  |  (including Key ID)                                        |  |
+|  |                                                            |  |
+|  |     [ PLAINTEXT / HBH Protected + E2E Authenticated ]      |  |
+|  +------------------------------------------------------------+  |
+|                                                                  |
+|  +------------------------------------------------------------+  |
+|  |  Original Payload + Private Header Extensions              |  |
+|  |                                                            |  |
+|  |        [ E2E Encrypted + E2E Authenticated ]               |  |
+|  +------------------------------------------------------------+  |
+|                                                                  |
++==================================================================+
+
+Legend:
+  PLAINTEXT / HBH Protected: Visible to relays, protected by TLS
+  E2E Authenticated: Integrity protected from original publisher to end subscriber
+  E2E Encrypted: Confidentiality protected from original publisher to end subscriber
+~~~
+{: #fig-secure-object title="MoQ Object Structure and Security Protection" }
 
 ## Extensions
 
-MoQT defines two types of Object Header Extensions, public (or mutable) and
+MoQT defines two types of Object Header Extensions, mutable and
 immutable. This specification uses MoQT immutable extensions to convey
-authenticated metadata and adds Private Object header extensions
+end-to-end authenticated metadata and adds Private Object header extensions
 (see {{pvt-ext}}). Private extensions are serialized and encrypted along with
 the Object payload, decrypted and deserialized by the receiver. This specification
 further defines `Secure Object KID` extension (see {{keyid-ext}}),
@@ -243,15 +277,16 @@ which is transmitted within the immutable extensions.
 
 The application assigns each track a set of (Key ID, `track_base_key`)
 tuples, where each `track_base_key` is known only to authorized original publishers
-and end subscribers for a given track. How these per-track secrets are established
-is outside the scope of this specification. The application also
-defines which Key ID should be used for a given encryption operation.
-For decryption, the Key ID is obtained from the `Secure Object KID` header
-extension that is contained with in the immutable header extension of the
+and end subscribers for a given track. How these per-track secrets and
+their lifetimes are established is outside the scope of this specification.
+The application also defines which Key ID should be used for a given encryption
+operation. For decryption, the Key ID is obtained from the `Secure Object KID`
+header extension (that is contained with in the immutable header extension of the
 Object).
 
 Applications determine the ciphersuite to be used for each
-track's encryption context.  Any SFrame ciphersuite can be used.
+track's encryption context.  See {{ciphersuite}} for the list
+of ciphersuites that can be used.
 
 ## Application Procedure {#app}
 
@@ -260,59 +295,161 @@ use mechanisms defined in this specification.
 
 ### Object Encryption
 
-To encrypt a MoQT Object, the application performs the following to
-produce the plaintext input:
+To encrypt a MoQT Object, the application constructs a plaintext
+from the application data and any private header extensions:
 
-Call the MoQT Object's payload as `original_payload`.
+~~~
+pt = Serialize(original_payload) + Serialize(Private header extensions)
+~~~
 
-`pt = Serialize(original_payload) + Serialize(Private header extensions)`
+Where `original_payload` is the application's object data. The
+serialization of `original_payload` consists of a varint-encoded
+byte count followed by the payload bytes. The serialization for
+private header extensions follows the rules for immutable extensions
+(as defined in section 11 of {{MoQ-TRANSPORT}}).
 
-The serialization for Private header extensions follows the rules defined in
-section 10.2.1.2 of {{MoQ-TRANSPORT}}. The serialzation of the MoQT Object
-Payload, i.e `original_payload`, has varint encoded count
-of the bytes in the payload followed by the original_payload bytes.
+The plaintext is then encrypted:
 
-`MoQT Object Payload = encrypt(pt)`
+~~~
+ciphertext = encrypt(pt)
+~~~
 
-The output of the encrypt operation is a chiphertext which is set as
-the payload for the MoQT Object, thus replacing the `original_payload`.
-The length of the ciphertext now reflects the encrypted length of
-`original_payload` as well as the private header extensions.
+The resulting ciphertext replaces the `original_payload` as the
+MoQT Object Payload. The ciphertext length reflects the encrypted
+`original_payload` plus any private header extensions plus the
+AEAD authentication tag.
+
+~~~ aasvg
++-------------------+     +-------------------------+
+| original_payload  |     | Private Header          |
+| (application data)|     | Extensions              |
++--------+----------+     +------------+------------+
+         |                             |
+         v                             v
+   +-----------+                 +-----------+
+   | Serialize |                 | Serialize |
+   +-----------+                 +-----------+
+         |                             |
+         +------------+  +-------------+
+                      |  |
+                      v  v
+              +-------+--+--------+
+              |   Plaintext (pt)  |
+              +--------+----------+
+                       |
+                       v
++----------------+     |     +----------------------+
+| track_base_key +---->+<----+ Group ID, Object ID, |
+| (per Key ID)   |     |     | Immutable Extensions |
++----------------+     |     +----------------------+
+        |              |              |
+        v              |              v
++-------+--------+     |     +--------+-------+
+| Key Derivation |     |     | Nonce Formation|
+| (HKDF)         |     |     | CTR = GID||OID |
++-------+--------+     |     +--------+-------+
+        |              |              |
+        v              v              v
+   +----+----+    +----+----+    +----+----+
+   | moq_key |    |   AAD   |    |  nonce  |
+   +---------+    +---------+    +---------+
+        |              |              |
+        +------+-------+-------+------+
+               |               |
+               v               v
+          +----+---------------+----+
+          |    AEAD.Encrypt         |
+          +------------+------------+
+                       |
+                       v
+          +------------+------------+
+          |       Ciphertext        |
+          |    (new MoQT Object     |
+          |       Payload)          |
+          +-------------------------+
+~~~
+{: #fig-encryption-process title="Object Encryption Process" }
 
 ### Object Decryption
 
-To decrypt a MoQT Object, the Object payload is provided as ciphertext input, to
-obtain the plaintext. Applications deserialize the plaintext to extract
-private header extensions and the application's `original_payload`.
+To decrypt a MoQT Object, the application provides the MoQT Object
+Payload as ciphertext input to obtain the plaintext:
 
-The following deserialization steps are performed:
+~~~
+pt = decrypt(ciphertext)
+~~~
 
-Let `input_payload` be the decrypted MoQT Object Payload.
+The plaintext is then deserialized to extract the application's
+`original_payload` and any private header extensions:
 
-1. original_payload_length = read_varint(input_payload)
-2. original_payload = read_bytes(input_payload, original_payload_length)
+1. Read a varint to obtain the `original_payload` length.
+
+2. Read that many bytes as `original_payload`.
+
+3. If no bytes remain, there are no private header extensions.
+
+4. Otherwise, read the extension type (16 bits). If the value
+   is not 0xA, drop the object. Parse the remaining bytes as
+   the Private header extension structure.
+
+If parsing fails at any stage, the receiver MUST drop the MoQT Object.
 
 
-- Read varint to obtain the `original_payload` length.
-
-- Read `original_payload` length bytes, call it `output_payload`.
-
-- If there exists no more data, this is the case of zero private header extensions.
-  So return an empty private extension stucture by setting Type to 0xA and
-  length to 0 and  MoQT Object after updating the `input_payload` and its
-  length to the output_payload.
-
-- Else, read 16 bits and if its value doesn't match 0XA, drop the incoming object, else
-  parse the rest of bits as Private header extension. Finally return
-  parsed private extensions and MoQT object after updating the
-  `input_payload` and its length to the `output_payload`.
-
-If parsing fails at any stage, drop the received MoQT Object.
+~~~ aasvg
+          +-------------------------+
+          |       Ciphertext        |
+          |      (MoQT Object       |
+          |       Payload)          |
+          +------------+------------+
+                       |
+                       v
++----------------+     |     +----------------------+
+| track_base_key +---->+<----+ Group ID, Object ID, |
+| (per Key ID)   |     |     | Immutable Extensions |
++----------------+     |     +----------------------+
+        |              |              |
+        v              |              v
++-------+--------+     |     +--------+-------+
+| Key Derivation |     |     | Nonce Formation|
+| (HKDF)         |     |     | CTR = GID||OID |
++-------+--------+     |     +--------+-------+
+        |              |              |
+        v              v              v
+   +----+----+    +----+----+    +----+----+
+   | moq_key |    |   AAD   |    |  nonce  |
+   +---------+    +---------+    +---------+
+        |              |              |
+        +------+-------+-------+------+
+               |               |
+               v               v
+          +----+---------------+----+
+          |    AEAD.Decrypt         |
+          +------------+------------+
+                       |
+                       v
+              +--------+----------+
+              |   Plaintext (pt)  |
+              +--------+----------+
+                       |
+                       v
+                 +-----+-----+
+                 |Deserialize|
+                 +-----+-----+
+                       |
+         +-------------+-------------+
+         |                           |
+         v                           v
++--------+----------+     +----------+--------+
+| original_payload  |     | Private Header    |
+| (application data)|     | Extensions        |
++-------------------+     +-------------------+
+~~~
+{: #fig-decryption-process title="Object Decryption Process" }
 
 ## Encryption Schema
 
-MoQT secure object protection relies on an SFrame cipher suite to define the
-AEAD encryption algorithm and hash algorithm in use {{!RFC9605}}.  We
+MoQT secure object protection relies on an ciphersute to define the
+AEAD encryption algorithm and hash algorithm in use ({{ciphersuite}}).  We
 will refer to the following aspects of the AEAD and the hash algorithm below:
 
 * `AEAD.Encrypt` and `AEAD.Decrypt` - The encryption and decryption functions
@@ -327,8 +464,7 @@ will refer to the following aspects of the AEAD and the hash algorithm below:
 * `AEAD.Nt` - The overhead in bytes of the encryption algorithm (typically the
   size of a "tag" that is added to the plaintext)
 
-* `AEAD.Nka` - For cipher suites using the compound AEAD described in {{Section
-  4.5.1 of RFC9605}}, the size in bytes of a key for the underlying encryption
+* `AEAD.Nka` - For cipher suites using the compound AEAD described in (Section 4.5.1 of {{SFRAME}}), the size in bytes of a key for the underlying encryption
   algorithm
 
 * `Hash.Nh` - The size in bytes of the output of the hash function
@@ -499,6 +635,12 @@ Private Extensions {
 }
 ~~~
 
+# Usage Considerations
+
+To implement the protection mechanisms specified herein, a secure object requires
+the complete object before any validity checks can be performed. This introduces latency proportional to the object size; if the application aggregates excessive data into a single object (e.g., encapsulating 6 seconds of video), the entire segment must be received before processing or validation can commence, delaying access to all contained data until transfer completion.
+
+
 # Security Considerations {#security}
 
 The cryptographic computations described in this document are exactly those
@@ -545,7 +687,8 @@ account for in order to use SFrame securely, which are all accounted for here:
    defined in {{aad}}.
 
 
-Any of the SFrame ciphersuites defined in the IANA SFrame Cipher Suites registry {{CIPHERS}} can be used
+Any of the SFrame ciphersuites defined in the IANA SFrame Cipher Suites
+registry {{CIPHERS}} can be used
 to protect MoQT objects.  The caution against short tags in {{Section 7.5 of SFRAME}}
 still applies here, but the MoQT environment provides some safeguards that make
 it safer to use short tags, namely:
@@ -560,14 +703,66 @@ it safer to use short tags, namely:
   metadata), together with MoQT's uniqueness properties ensure that a valid
   secure object payload cannot be replayed in a different context.
 
+The invocation limits for AEAD algorithms usage MUST follow the
+recommendations in {{AEAD-LIMITS}} specification
+
 # IANA Considerations {#iana}
 
-This document defines a new MoQT Object extension header for carrying Key ID value,
-under the `MOQ Extension Headers` registry.
+## MOQ Extension Headers Registry
+
+This document defines new MoQT Object extension headers under the
+`MOQ Extension Headers` registry.
 
 | Type |                         Value                        |
 | ---- | ---------------------------------------------------- |
-| 0x2  | Seucure Object KID - see {{keyid-ext}}
+| 0x2  | Secure Object KID - see {{keyid-ext}}                |
+| 0xA  | Private Extensions - see {{pvt-ext}}                 |
+
+## Cipher Suites {#ciphersuite}
+
+This document establishes a "MoQ Secure Objects Cipher Suites" registry.
+Each cipher suite specifies an AEAD encryption algorithm and a hash
+algorithm used for key derivation.
+
+The following values are defined for each cipher suite:
+
+* `Nh`: The size in bytes of the hash function output
+* `Nka`: The size in bytes of the encryption key for the underlying cipher (CTR suites only)
+* `Nk`: The size in bytes of the AEAD key
+* `Nn`: The size in bytes of the AEAD nonce
+* `Nt`: The size in bytes of the AEAD authentication tag
+
+| Value  | Name                       | R | Nh | Nka | Nk | Nn | Nt |
+| ------ | -------------------------- | - | -- | --- | -- | -- | -- |
+| 0x0000 | Reserved                   | - |    |     |    |    |    |
+| 0x0001 | AES_128_CTR_HMAC_SHA256_80 | Y | 32 | 16  | 48 | 12 | 10 |
+| 0x0002 | AES_128_CTR_HMAC_SHA256_64 | Y | 32 | 16  | 48 | 12 | 8  |
+| 0x0003 | AES_128_CTR_HMAC_SHA256_32 | N | 32 | 16  | 48 | 12 | 4  |
+| 0x0004 | AES_128_GCM_SHA256_128     | Y | 32 | n/a | 16 | 12 | 16 |
+| 0x0005 | AES_256_GCM_SHA512_128     | Y | 64 | n/a | 32 | 12 | 16 |
+| 0xF000-0xFFFF | Reserved for private use | - |  |     |    |    |    |
+
+The "R" column indicates whether the cipher suite is Recommended:
+
+* Y: Yes, this cipher suite is recommended for use.
+* N: No, this cipher suite is not recommended due to security concerns.
+* D: Deprecated, this cipher suite should no longer be used.
+
+Cipher suite values are 2-byte big-endian integers.
+
+**AES-GCM cipher suites** (0x0004, 0x0005) use AES-GCM for authenticated
+encryption with a full 128-bit authentication tag.
+
+**AES-CTR-HMAC cipher suites** (0x0001, 0x0002, 0x0003) use AES in counter
+mode combined with HMAC for authentication in an encrypt-then-MAC
+construction. These suites support truncated authentication tags,
+providing lower overhead at the cost of reduced forgery resistance.
+
+Implementations MUST support `AES_128_GCM_SHA256_128` (0x0004).
+Implementations SHOULD support `AES_128_CTR_HMAC_SHA256_80` (0x0001).
+
+New cipher suite registrations follow the Specification Required policy
+as defined in {{!RFC8126}}.
 
 
 
