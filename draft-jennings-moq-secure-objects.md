@@ -703,8 +703,67 @@ it safer to use short tags, namely:
   metadata), together with MoQT's uniqueness properties ensure that a valid
   secure object payload cannot be replayed in a different context.
 
-The invocation limits for AEAD algorithms usage MUST follow the
-recommendations in {{AEAD-LIMITS}} specification
+## AEAD Invocation Limits
+
+AEAD algorithms have limits on how many times a single key can be used
+before the cryptographic guarantees begin to degrade. Exceeding these
+limits can compromise confidentiality (allowing an attacker to
+distinguish encrypted content from random data) or integrity (allowing
+an attacker to forge valid ciphertexts). The severity of these risks
+depends on the specific algorithm in use.
+
+Implementations MUST track the number of encryption and decryption
+operations performed with each `moq_key` and ensure that these counts
+remain within the limits specified in {{AEAD-LIMITS}} for the cipher
+suite in use. When approaching these limits, implementations MUST
+arrange for new keying material to be established (e.g., by rotating
+to a new Key ID with a fresh `track_base_key`) before the limits are
+exceeded.
+
+For the AES-GCM cipher suites defined in this document, the primary
+concern is the confidentiality limit, which restricts the number of
+encryptions performed with a single key. For AES-CTR-HMAC cipher
+suites, both encryption and decryption operations count toward the
+applicable limits.
+
+## Detecting Deletion by Malicious Relays {#deletion-detection}
+
+A malicious relay could selectively delete objects or groups before forwarding
+them to subscribers. While this specification does not mandate detection of such
+deletions, it does provide mechanisms that applications can use to detect when
+content has been removed.
+
+Some applications may not require deletion detection, or may be able to detect
+missing data based on the internal structure of the object payload (e.g.,
+sequence numbers embedded in the media format). For applications that do require
+deletion detection at the MoQT layer, the following approaches are available:
+
+### Monotonically Incrementing Identifiers
+
+Applications that assign Group IDs and Object IDs in a strictly monotonic
+sequence (incrementing by 1 for each successive group or object) can
+straightforwardly detect gaps. A subscriber receiving Group ID N followed by
+Group ID N+2, or Object ID M followed by Object ID M+3, can conclude that
+intervening content was not delivered.
+
+### Non-Sequential Identifiers with Gap Extensions
+
+Applications that use Group IDs or Object IDs with intentional gaps (e.g., for
+sparse data or timestamp-based identifiers) MUST include the Group ID Gap
+and/or Object ID Gap extensions as immutable header extensions. These extensions
+indicate the expected distance to the next identifier. If the Object ID Gap
+extension is absent from a secure object, receivers MUST assume a gap value
+of 1. Similarly, if the Group ID Gap extension is absent, receivers MUST assume
+a gap value of 1.
+
+## Signaling End of Content
+
+For applications that need to reliably detect lost objects at the end of a
+subgroup, group, or track, it is RECOMMENDED to signal completion using object
+status values defined in {{MoQ-TRANSPORT}}. By explicitly marking the final
+object in a sequence, subscribers can distinguish between "more objects may
+arrive" and "all objects have been sent," enabling detection of trailing
+deletions that would otherwise be undetectable.
 
 # IANA Considerations {#iana}
 
