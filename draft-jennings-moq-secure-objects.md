@@ -808,7 +808,8 @@ The "R" column indicates whether the cipher suite is Recommended:
      RECOMMENDED. Requries Standard Action as defined {{!RFC8126}}.
 
 * N: Indicates the IETF has made no statement about the suitability of
-     the associated mechanism. Requires FCFS as defined in {{!RFC8126}}.
+     the associated mechanism. Requires First Come First Serve as
+     defined in {{!RFC8126}}.
 
 * D: Indicates that the item is discouraged and SHOULD NOT be
      used. Requirest Standard Action or IESG Approval as defined in
