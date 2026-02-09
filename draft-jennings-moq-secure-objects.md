@@ -48,12 +48,14 @@ informative:
 
 --- abstract
 
-This document describes an end-to-end authenticated encryption scheme
-for application objects intended to be delivered over Media over QUIC (MoC)
-Transport. This allows publishers that share a symetric key with
-the subscribers to ensure that MoQ relays can not decrypt the contents
-of objects an that subscribes can verify the content has not beebn
-changed.
+This document specifies an end-to-end authenticated encryption scheme for 
+application objects transmitted via Media over QUIC (MoQ) Transport. The scheme 
+enables original publishers to securely share a symmetric key with end 
+subscribers, ensuring that MoQ relays are unable to decrypt object contents. 
+Additionally, subscribers can verify the integrity and authenticity of 
+received objects, confirming that the content has not been modified in 
+transit.
+
 
 --- middle
 
