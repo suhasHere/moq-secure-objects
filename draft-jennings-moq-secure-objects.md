@@ -831,3 +831,4 @@ as defined in {{!RFC8126}}.
 
 Thanks to Alan Frindell for providing text on adding private
 extensions.
+hank you to Magnus Westerlund for doing a thorough security review.
