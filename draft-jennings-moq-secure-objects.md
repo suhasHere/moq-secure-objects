@@ -38,7 +38,6 @@ normative:
   AEAD-LIMITS: I-D.draft-irtf-cfrg-aead-limits
 
 informative:
-  QUIC: RFC9000
   CIPHERS:
     title: SFrame Cipher Suites
     author:
