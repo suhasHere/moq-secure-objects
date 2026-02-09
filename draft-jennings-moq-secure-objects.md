@@ -198,8 +198,9 @@ Media Over QUIC Application
 ~~~
 {: #fig-moqt-session title="Structure of an MoQT session" }
 
-Objects are comprised of two parts: envolope and a payload. The envelope
-is never end to end encrypted and is always visible to relays. The
+Objects are comprised of three parts: parts that Relays can read and
+modify, parts that Relay can read but is not allowed to modify, and parts
+the Relays cannot read or modify. The
 payload portion MAY be end to end encrypted, in which case it is only
 visible to the original publisher and the end subscribers. The application is
 solely responsible for the content of the object payload.
@@ -556,7 +557,7 @@ The encryption procedure is as follows:
 
 1. Obtain the plaintext payload to encrypt from the MoQT object. Extract
    the Group ID, Object ID, and the Serialized Immutable Header Extension from
-   the MoQT object envelope. Ensure the Secure Object KID header extension is
+   the MoQT object headers. Ensure the Secure Object KID header extension is
    included, with the Key ID set as its value.
 
 2. Retrieve the `moq_key` and `moq_salt` matching the Key ID.
@@ -583,7 +584,7 @@ The decryption procedure is as follows:
 
 1. Parse the SecureObject to obtain Key ID, the ciphertext corresponding
    to MoQT object payload and the Group ID and Object ID from the MoQT
-   object envelope.
+   object headers.
 
 2. Retrieve the `moq_key`, `moq_salt` and MoQT track information matching the Key ID.
 
@@ -805,9 +806,17 @@ The following values are defined for each cipher suite:
 
 The "R" column indicates whether the cipher suite is Recommended:
 
-* Y: Yes, this cipher suite is recommended for use.
-* N: No, this cipher suite is not recommended due to security concerns.
-* D: Deprecated, this cipher suite should no longer be used.
+* Y: Indicates that the IETF has consensus that the item is
+     RECOMMENDED. Requries Standard Action as defined {{!RFC8126}}.
+
+* N: Indicates the IETF has made no statement about the suitability of
+     the associated mechanism. Requires First Come First Serve as
+     defined in {{!RFC8126}}.
+
+* D: Indicates that the item is discouraged and SHOULD NOT be
+     used. Requirest Standard Action or IESG Approval as defined in
+     {{!RFC8126}}.
+
 
 Cipher suite values are 2-byte big-endian integers.
 
@@ -822,10 +831,6 @@ providing lower overhead at the cost of reduced forgery resistance.
 Implementations MUST support `AES_128_GCM_SHA256_128` (0x0004).
 Implementations SHOULD support `AES_128_CTR_HMAC_SHA256_80` (0x0001).
 
-New cipher suite registrations follow the Specification Required policy
-as defined in {{!RFC8126}}.
-
-
 
 --- back
 
@@ -833,3 +838,4 @@ as defined in {{!RFC8126}}.
 
 Thanks to Alan Frindell for providing text on adding private
 extensions.
+hank you to Magnus Westerlund for doing a thorough security review.
