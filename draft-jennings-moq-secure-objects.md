@@ -48,11 +48,12 @@ informative:
 
 --- abstract
 
-This document describes an end-to-end authenticated encryption scheme for
-application objects intended to be delivered over Media over QUIC Transport
-(MoQT).  We reuse the SFrame scheme for authenticated encryption of media
-objects, while suppressing data that would be redundant between SFrame and MoQT,
-for an efficient on-the-wire representation.
+This document describes an end-to-end authenticated encryption scheme
+for application objects intended to be delivered over Media over QUIC (MoC)
+Transport. This allows publishers that share a symetric key with
+the subscribers to ensure that MoQ relays can not decrypt the contents
+of objects an that subscribes can verify the content has not beebn
+changed.
 
 --- middle
 
@@ -113,7 +114,7 @@ HBH:
 : Hop By Hop
 
 varint:
-: {{QUIC}} variable length integer, section 1.3
+: {{MoQ-TRANSPORT}} variable length integer. TODO - align with -17 MoQT draft
 
 ## Notational Conventions
 
@@ -193,7 +194,7 @@ Media Over QUIC Application
              | Object0 |     | Object0 |       | Object0 |
              +---------+     +---------+       +---------+
 ~~~
-{: #fig-MoQT-session title="Structure of an MoQT session" }
+{: #fig-moqt-session title="Structure of an MoQT session" }
 
 Objects are comprised of two parts: envolope and a payload. The envelope
 is never end to end encrypted and is always visible to relays. The
@@ -655,7 +656,7 @@ The scheme in this document is effectively a "virtualized" version of SFrame:
 
 * The format of the AAD is different:
 
-    * The SFrame Header is constructed using QUIC-style varints, instead of the
+    * The SFrame Header is constructed using MoQT-style varints, instead of the
       variable-length integer scheme defined in SFrame.
 
     * The GroupID and GroupID are sent directly, not as the packed CTR value.
@@ -686,7 +687,6 @@ account for in order to use SFrame securely, which are all accounted for here:
 4. **Metadata:** The analogue of the SFrame metadata input is
    defined in {{aad}}.
 
-
 Any of the SFrame ciphersuites defined in the IANA SFrame Cipher Suites
 registry {{CIPHERS}} can be used
 to protect MoQT objects.  The caution against short tags in {{Section 7.5 of SFRAME}}
@@ -696,7 +696,7 @@ it safer to use short tags, namely:
 * MoQT has hop-by-hop protections provided by the underlying QUIC layer, so a
   brute-force attack could only be mounted by a relay.
 
-* MoQT tracks have predictable object arrival rates, so a receiver can interpret
+* In some uses cases MoQT tracks have predictable object arrival rates, so a receiver can interpret
   a large deviation from this rate as a sign of an attack.
 
 * The the binding of the secure object payload to other MoQT parameters (as
