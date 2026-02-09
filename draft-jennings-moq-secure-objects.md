@@ -804,9 +804,16 @@ The following values are defined for each cipher suite:
 
 The "R" column indicates whether the cipher suite is Recommended:
 
-* Y: Yes, this cipher suite is recommended for use.
-* N: No, this cipher suite is not recommended due to security concerns.
-* D: Deprecated, this cipher suite should no longer be used.
+* Y: Indicates that the IETF has consensus that the item is
+     RECOMMENDED. Requries Standard Action as defined {{!RFC8126}}.
+
+* N: Indicates the IETF has made no statement about the suitability of
+     the associated mechanism. Requires FCFS as defined in {{!RFC8126}}.
+
+* D: Indicates that the item is discouraged and SHOULD NOT be
+     used. Requirest Standard Action or IESG Approval as defined in
+     {{!RFC8126}}.
+
 
 Cipher suite values are 2-byte big-endian integers.
 
@@ -820,10 +827,6 @@ providing lower overhead at the cost of reduced forgery resistance.
 
 Implementations MUST support `AES_128_GCM_SHA256_128` (0x0004).
 Implementations SHOULD support `AES_128_CTR_HMAC_SHA256_80` (0x0001).
-
-New cipher suite registrations follow the Specification Required policy
-as defined in {{!RFC8126}}.
-
 
 
 --- back
