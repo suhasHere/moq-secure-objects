@@ -698,7 +698,7 @@ it safer to use short tags, namely:
 * MoQT has hop-by-hop protections provided by the underlying QUIC layer, so a
   brute-force attack could only be mounted by a relay.
 
-* In some uses cases MoQT tracks have predictable object arrival rates, so a receiver can interpret
+* In some usecases MoQT tracks have predictable object arrival rates, so a receiver can interpret
   a large deviation from this rate as a sign of an attack.
 
 * The the binding of the secure object payload to other MoQT parameters (as
