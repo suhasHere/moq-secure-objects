@@ -34,11 +34,11 @@ author:
 
 normative:
   MoQ-TRANSPORT: I-D.draft-ietf-moq-transport
-  QUIC: RFC9000
   SFRAME: RFC9605
   AEAD-LIMITS: I-D.draft-irtf-cfrg-aead-limits
 
 informative:
+  QUIC: RFC9000
   CIPHERS:
     title: SFrame Cipher Suites
     author:
@@ -119,10 +119,6 @@ varint:
 : {{MoQ-TRANSPORT}} variable length integer. TODO - align with -17 MoQT draft
 
 ## Notational Conventions
-
-This document uses the conventions detailed in ({{QUIC}} Section 1.3)
-when describing the binary encoding.
-
 
 ### Serialized Full Track Name {#ftn}
 
