@@ -196,8 +196,9 @@ Media Over QUIC Application
 ~~~
 {: #fig-moqt-session title="Structure of an MoQT session" }
 
-Objects are comprised of two parts: envolope and a payload. The envelope
-is never end to end encrypted and is always visible to relays. The
+Objects are comprised of three parts: parts the relay can read and
+modify, parts the relay can read but is not allowed to modify, and parts
+the relay can not read or modify. The
 payload portion MAY be end to end encrypted, in which case it is only
 visible to the original publisher and the end subscribers. The application is
 solely responsible for the content of the object payload.
@@ -554,7 +555,7 @@ The encryption procedure is as follows:
 
 1. Obtain the plaintext payload to encrypt from the MoQT object. Extract
    the Group ID, Object ID, and the Serialized Immutable Header Extension from
-   the MoQT object envelope. Ensure the Secure Object KID header extension is
+   the MoQT object headers. Ensure the Secure Object KID header extension is
    included, with the Key ID set as its value.
 
 2. Retrieve the `moq_key` and `moq_salt` matching the Key ID.
@@ -581,7 +582,7 @@ The decryption procedure is as follows:
 
 1. Parse the SecureObject to obtain Key ID, the ciphertext corresponding
    to MoQT object payload and the Group ID and Object ID from the MoQT
-   object envelope.
+   object headers.
 
 2. Retrieve the `moq_key`, `moq_salt` and MoQT track information matching the Key ID.
 
