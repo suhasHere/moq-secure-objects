@@ -48,12 +48,12 @@ informative:
 
 --- abstract
 
-This document specifies an end-to-end authenticated encryption scheme for 
-application objects transmitted via Media over QUIC (MoQ) Transport. The scheme 
-enables original publishers to securely share a symmetric key with end 
-subscribers, ensuring that MoQ relays are unable to decrypt object contents. 
-Additionally, subscribers can verify the integrity and authenticity of 
-received objects, confirming that the content has not been modified in 
+This document specifies an end-to-end authenticated encryption scheme for
+application objects transmitted via Media over QUIC (MoQ) Transport. The scheme
+enables original publishers to securely share a symmetric key with end
+subscribers, ensuring that MoQ relays are unable to decrypt object contents.
+Additionally, subscribers can verify the integrity and authenticity of
+received objects, confirming that the content has not been modified in
 transit.
 
 
@@ -239,14 +239,14 @@ objects over QUIC Datagrams or QUIC streams.
 +==================================================================+
 |                                                                  |
 |  +------------------------------------------------------------+  |
-|  |  Track Namespace, Track Name, Mutable Extensions           |  |
+|  |      Track Alias, Priority, Mutable Extensions,..          |  |
 |  |                                                            |  |
 |  |              [ PLAINTEXT / HBH Protected ]                 |  |
 |  +------------------------------------------------------------+  |
 |                                                                  |
 |  +------------------------------------------------------------+  |
 |  |  Group ID, Object ID, Immutable Header Extensions          |  |
-|  |  (including Key ID)                                        |  |
+   |  Track Namespace, Track Name  (including Key ID)           |  |
 |  |                                                            |  |
 |  |     [ PLAINTEXT / HBH Protected + E2E Authenticated ]      |  |
 |  +------------------------------------------------------------+  |
