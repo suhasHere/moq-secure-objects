@@ -775,6 +775,11 @@ This document defines new MoQT Object extension headers under the
 | 0x2  | Secure Object KID - see {{keyid-ext}}                |
 | 0xA  | Private Extensions - see {{pvt-ext}}                 |
 
+Note: The Private Extensions type (0xA) appears only within the encrypted
+payload structure defined in {{app}}, not as a regular MoQT Object Header
+Extension. It is registered here to reserve the type value and prevent
+conflicts with the extension type field used in the encrypted payload format.
+
 ## Cipher Suites {#ciphersuite}
 
 This document establishes a "MoQ Secure Objects Cipher Suites" registry.
