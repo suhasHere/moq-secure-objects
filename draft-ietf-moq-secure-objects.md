@@ -243,7 +243,7 @@ objects over QUIC Datagrams or QUIC streams.
 |                                                                  |
 |  +------------------------------------------------------------+  |
 |  |  Group ID, Object ID, Immutable Header Extensions          |  |
-   |  Track Namespace, Track Name  (including Key ID)           |  |
+|  |  Track Namespace, Track Name  (including Key ID)           |  |
 |  |                                                            |  |
 |  |     [ PLAINTEXT / HBH Protected + E2E Authenticated ]      |  |
 |  +------------------------------------------------------------+  |
