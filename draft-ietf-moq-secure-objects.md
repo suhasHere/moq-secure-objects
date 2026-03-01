@@ -125,7 +125,8 @@ Serialized Full Track Name is composed of MoQT Track Namespace and
 Track Name as shown below:
 
 ~~~
-Serialized Full Track Name = Serialize(Track Namespace) +  Serialize(Track Name)
+Serialized Full Track Name = Serialize(Track Namespace)
+                             + Serialize(Track Name)
 ~~~
 
 The `Serialize` operation follows the same on-the-wire
@@ -242,7 +243,7 @@ objects over QUIC Datagrams or QUIC streams.
 |                                                                  |
 |  +------------------------------------------------------------+  |
 |  |  Group ID, Object ID, Immutable Header Extensions          |  |
-   |  Track Namespace, Track Name  (including Key ID)           |  |
+|  |  Track Namespace, Track Name  (including Key ID)           |  |
 |  |                                                            |  |
 |  |     [ PLAINTEXT / HBH Protected + E2E Authenticated ]      |  |
 |  +------------------------------------------------------------+  |
@@ -257,8 +258,10 @@ objects over QUIC Datagrams or QUIC streams.
 
 Legend:
   PLAINTEXT / HBH Protected: Visible to relays, protected by TLS
-  E2E Authenticated: Integrity protected from original publisher to end subscriber
-  E2E Encrypted: Confidentiality protected from original publisher to end subscriber
+  E2E Authenticated: Integrity protected from original publisher
+                     to end subscriber
+  E2E Encrypted: Confidentiality protected from original publisher
+                 to end subscriber
 ~~~
 {: #fig-secure-object title="MoQ Object Structure and Security Protection" }
 
@@ -298,7 +301,8 @@ To encrypt a MoQT Object, the application constructs a plaintext
 from the application data and any private header extensions:
 
 ~~~
-pt = Serialize(original_payload) + Serialize(Private header extensions)
+pt = Serialize(original_payload)
+     + Serialize(Private header extensions)
 ~~~
 
 Where `original_payload` is the application's object data. The
@@ -512,12 +516,17 @@ associated with a Key ID. Given a `track_base_key` value, the key and salt are
 derived using HMAC-based Key Derivation Function (HKDF) {{!RFC5869}} as follows:
 
 ~~~ pseudocode
-def derive_key_salt(key_id, track_base_key, serialized_full_track_name):
+def derive_key_salt(key_id,track_base_key,
+                    serialized_full_track_name):
   moq_secret = HKDF-Extract("", track_base_key)
-  moq_key_label = "MOQ 1.0 Secure Objects Secret key " + serialized_full_track_name + cipher_suite + key_id
+  moq_key_label = "MOQ 1.0 Secure Objects Secret key "
+                + serialized_full_track_name
+                + cipher_suite + key_id
   moq_key =
     HKDF-Expand(moq_secret, moq_key_label, AEAD.Nk)
-  moq_salt_label = "MOQ 1.0 Secret salt " + serialized_full_track_name + cipher_suite + key_id
+  moq_salt_label = "MOQ 1.0 Secret salt "
+                 + serialized_full_track_name
+                 + cipher_suite + key_id
   moq_salt =
     HKDF-Expand(moq_secret, moq_salt_label, AEAD.Nn)
 
