@@ -1,7 +1,7 @@
 ---
 title: End-to-End Secure Objects for Media over QUIC Transport
 abbrev: MoQT Secure Objects
-docname: draft-jennings-moq-secure-objects-latest
+docname: draft-ietf-moq-secure-objects-00
 category: std
 
 ipr: trust200902
