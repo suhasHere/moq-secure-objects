@@ -7,7 +7,7 @@ This is the working area for the individual Internet-Draft, "MoQ Secure Objects"
 ## Contributing
 
 See the
-[guidelines for contributions](https://[github.com/moq-wg/secure-objects/blob/main/CONTRIBUTING.md).
+[guidelines for contributions](https://github.com/moq-wg/secure-objects/blob/main/CONTRIBUTING.md).
 
 Contributions can be made by creating pull requests.
 

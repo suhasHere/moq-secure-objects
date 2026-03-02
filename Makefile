@@ -1,17 +1,15 @@
+LIBDIR := lib
+-include $(LIBDIR)/main.mk
 
-all: draft-ietf-moq-secure-objects-00.txt  draft-ietf-moq-secure-objects-00.html
-
-clean:
-	rm -f draft-ietf-moq-secure-objects-00.txt \
-		draft-ietf-moq-secure-objects-00.html \
-		draft-ietf-moq-secure-objects-00.xml
-
-draft-ietf-moq-secure-objects-00.xml: draft-ietf-moq-secure-objects.md
-	kramdown-rfc -3 draft-ietf-moq-secure-objects.md > draft-ietf-moq-secure-objects-00.xml
-
-draft-ietf-moq-secure-objects-00.txt: draft-ietf-moq-secure-objects-00.xml
-	xml2rfc  draft-ietf-moq-secure-objects-00.xml --text >  draft-ietf-moq-secure-objects-00.txt
-
-draft-ietf-moq-secure-objects-00.html: draft-ietf-moq-secure-objects-00.xml
-	xml2rfc  draft-ietf-moq-secure-objects-00.xml --html >  draft-ietf-moq-secure-objects-00.html
-
+$(LIBDIR)/main.mk:
+ifneq (,$(shell grep "path *= *$(LIBDIR)" .gitmodules 2>/dev/null))
+	git submodule sync
+	git submodule update --init
+else
+ifneq (,$(wildcard $(ID_TEMPLATE_HOME)))
+	ln -s "$(ID_TEMPLATE_HOME)" $(LIBDIR)
+else
+	git clone -q --depth 10 -b main \
+	    https://github.com/martinthomson/i-d-template $(LIBDIR)
+endif
+endif

@@ -1,7 +1,7 @@
 ---
 title: End-to-End Secure Objects for Media over QUIC Transport
 abbrev: MoQT Secure Objects
-docname: draft-ietf-moq-secure-objects-00
+docname: draft-ietf-moq-secure-objects-latest
 category: std
 
 ipr: trust200902
@@ -14,8 +14,8 @@ venue:
   type: "Working Group"
   mail: "moq@ietf.org"
   arch: "https://mailarchive.ietf.org/arch/browse/moq/"
-  github: "suhasHere/moq-secure-objects"
-  latest: "https://suhashere.github.io/moq-secure-objects/#go.draft-jennings-moq-secure-objects.html"
+  github: "moq-wg/secure-objects"
+  latest: "https://moq-wg.github.io/secure-objects/draft-ietf-moq-secure-objects.html"
 
 author:
  -
@@ -699,7 +699,7 @@ for here:
 4. **Metadata:** The analogue of the SFrame metadata input is defined in
    {{aad}}.
 
-Any of the ciphersuites defined in {{ciphersuite} registry can be used
+Any of the ciphersuites defined in {{ciphersuite}} registry can be used
 to protect MoQT objects.  The caution against short tags in {{Section
 7.5 of SFRAME}} still applies here, but the MoQT environment provides
 some safeguards that make it safer to use short tags, namely:
