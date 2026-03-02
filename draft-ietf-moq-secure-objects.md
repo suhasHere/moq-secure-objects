@@ -49,11 +49,13 @@ informative:
 
 This document specifies an end-to-end authenticated encryption scheme for
 application objects transmitted via Media over QUIC (MoQ) Transport. The scheme
-enables original publishers to securely share a symmetric key with end
-subscribers, ensuring that MoQ relays are unable to decrypt object contents.
+enables original publishers that share a symmetric key with end
+subscribers, to ensuring that MoQ relays are unable to decrypt object contents.
 Additionally, subscribers can verify the integrity and authenticity of
 received objects, confirming that the content has not been modified in
 transit.
+Additionally it allows MoQ parameters to protected so the publisher can
+select if they are readable and/or modifiable by relays.
 
 
 --- middle
@@ -301,12 +303,12 @@ The detailed encryption process is shown below:
           |                        |
           v                        v
           +------------+----------------------------------------------+
-                                                                      | 
+                                                                      |
 +----------------+           +-------------------------------+        |
-| track_base_key |           | Key ID, Group ID, Object ID,  |        |     
+| track_base_key |           | Key ID, Group ID, Object ID,  |        |
 | (per Key ID)   |           | Track Namespace, Track Name,  |        |
 +-------+--------+           | Serialized Immutable Ext.     |        |
-        |                    +-------+-----------------------+        |    
+        |                    +-------+-----------------------+        |
         v                            |                                |
 +-------+--------+                   +------------+-----------+       |
 | Key Derivation |                   |                        |       |
@@ -316,15 +318,15 @@ The detailed encryption process is shown below:
     |         |                 +----+-------------------+  +-----+   |
     |         |                      |                        |       |
     |         |                      |                        |       |
-    |         |                      |                        |       |  
     |         |                      |                        |       |
-    |         |                      |                        |       |       
+    |         |                      |                        |       |
+    |         |                      |                        |       |
     |         |                      |                        |       |
     |         |                      |                        |       |
     |         |                      |                        |       |
     |         |                      v                        |       |
     |         |  salt      +----+-----------+                 |       |
-    |         +----------> | Nonce Formation|                 |       |       
+    |         +----------> | Nonce Formation|                 |       |
     |                      +----+-----------+                 |       |
     |                                |                        |       |
     |                                |                        |       |
