@@ -839,14 +839,14 @@ The following values are defined for each cipher suite:
 The "R" column indicates whether the cipher suite is Recommended:
 
 * Y: Indicates that the IETF has consensus that the item is
-     RECOMMENDED. Requries Standard Action as defined {{!RFC8126}}.
+     RECOMMENDED. Requires Standard Action as defined {{!RFC8126}}.
 
 * N: Indicates the IETF has made no statement about the suitability of
      the associated mechanism. Requires First Come First Serve as
      defined in {{!RFC8126}}.
 
 * D: Indicates that the item is discouraged and SHOULD NOT be
-     used. Requirest Standard Action or IESG Approval as defined in
+     used. Requires Standard Action or IESG Approval as defined in
      {{!RFC8126}}.
 
 Cipher suite values are 2-byte big-endian integers.  The algorithms are
