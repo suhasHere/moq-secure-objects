@@ -237,7 +237,7 @@ from the `Secure Object Key ID` property (that is contained within the
 immutable properties of the Object).
 The scope of a Key ID is the namespace so if two tracks inside the same
 namespace have different tracks_base_keys, then they need to have
-different Key ID values. This design is to support a keys across many
+different Key ID values. This design is to support a single key across many
 tracks where a client uses subscribe namespace to get new tracks as they
 are created in the namespace.
 
