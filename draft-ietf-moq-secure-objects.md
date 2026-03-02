@@ -687,9 +687,9 @@ account for in order to use SFrame securely, which are all accounted for here:
 4. **Metadata:** The analogue of the SFrame metadata input is
    defined in {{aad}}.
 
-Any of the SFrame ciphersuites defined in the IANA SFrame Cipher Suites
-registry {{CIPHERS}} can be used
-to protect MoQT objects.  The caution against short tags in {{Section 7.5 of SFRAME}}
+Any of the ciphersuites defined in {{ciphersuite} registry can be used
+to protect MoQT objects.
+The caution against short tags in {{Section 7.5 of SFRAME}}
 still applies here, but the MoQT environment provides some safeguards that make
 it safer to use short tags, namely:
 
@@ -834,6 +834,8 @@ The "R" column indicates whether the cipher suite is Recommended:
 
 
 Cipher suite values are 2-byte big-endian integers.
+The algorithms are the same as defined in SFrame ciphersuites defined in
+the IANA SFrame Cipher Suites -registry {{CIPHERS}}.
 
 **AES-GCM cipher suites** (0x0004, 0x0005) use AES-GCM for authenticated
 encryption with a full 128-bit authentication tag.
@@ -845,6 +847,7 @@ providing lower overhead at the cost of reduced forgery resistance.
 
 Implementations MUST support `AES_128_GCM_SHA256_128` (0x0004).
 Implementations SHOULD support `AES_128_CTR_HMAC_SHA256_80` (0x0001).
+
 
 
 --- back
