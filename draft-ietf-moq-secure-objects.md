@@ -230,7 +230,6 @@ and `Object Payload` fields, regardless of the on-the-wire encoding of the
 objects over QUIC Datagrams or QUIC streams.
 
 ~~~ aasvg
-
 +==================================================================+
 |                    MoQT Secure Object.                           |
 +==================================================================+
@@ -322,54 +321,61 @@ MoQT Object Payload. The ciphertext length reflects the encrypted
 `original_payload` plus any private header extensions plus the
 AEAD authentication tag.
 
+The detailed encryption process is shown below:
+
 ~~~ aasvg
-+-------------------+     +-------------------------+
-| original_payload  |     | Private Header          |
-| (application data)|     | Extensions              |
-+--------+----------+     +------------+------------+
-         |                             |
-         v                             v
-   +-----------+                 +-----------+
-   | Serialize |                 | Serialize |
-   +-----------+                 +-----------+
-         |                             |
-         +------------+  +-------------+
-                      |  |
-                      v  v
-              +-------+--+--------+
-              |   Plaintext (pt)  |
-              +--------+----------+
++-------------------+     +-----------------+
+| original_payload  |     | Private Header  |
+| (application data)|     | Extensions      |
++---------+---------+     +--------+--------+
+          |                        |
+          v                        v
+          +------------+----------------------------------------------+
+                                                                      | 
++----------------+           +-------------------------------+        |
+| track_base_key |           | Key ID, Group ID, Object ID,  |        |     
+| (per Key ID)   |           | Track Namespace, Track Name,  |        |
++-------+--------+           | Serialized Immutable Ext.     |        |
+        |                    +-------+-----------------------+        |    
+        v                            |                                |
++-------+--------+                   +------------+-----------+       |
+| Key Derivation |                   |                        |       |
+| (HKDF)         |                   v                        v       |
++---+--------+---+              +------------------------+  +-----+   |
+    |         |                 | CTR = GID(64)||OID(32) |  | AAD |   |
+    |         |                 +----+-------------------+  +-----+   |
+    |         |                      |                        |       |
+    |         |                      |                        |       |
+    |         |                      |                        |       |  
+    |         |                      |                        |       |
+    |         |                      |                        |       |       
+    |         |                      |                        |       |
+    |         |                      |                        |       |
+    |         |                      |                        |       |
+    |         |                      v                        |       |
+    |         |  salt      +----+-----------+                 |       |
+    |         +----------> | Nonce Formation|                 |       |       
+    |                      +----+-----------+                 |       |
+    |                                |                        |       |
+    |                                |                        |       |
+    |                                |                        |       |
+    |                                |                        |       |
+    |                                |                        |       |
+    |                                |                        |       |
+    | key                            | nonce                  | aad   | pt
+    |                                v                        |       |
+    |    +-------------+--------------+                       |       |
+    |    |                            |                       |       |
+    +--->+        AEAD.Encrypt        +<----------------------+       |
+         |                            |<------------------------------+
+         +-------------+--------------+
                        |
                        v
-+----------------+     |     +----------------------+
-| track_base_key +---->+<----+ Group ID, Object ID, |
-| (per Key ID)   |     |     | Immutable Extensions |
-+----------------+     |     +----------------------+
-        |              |              |
-        v              |              v
-+-------+--------+     |     +--------+-------+
-| Key Derivation |     |     | Nonce Formation|
-| (HKDF)         |     |     | CTR = GID||OID |
-+-------+--------+     |     +--------+-------+
-        |              |              |
-        v              v              v
-   +----+----+    +----+----+    +----+----+
-   | moq_key |    |   AAD   |    |  nonce  |
-   +---------+    +---------+    +---------+
-        |              |              |
-        +------+-------+-------+------+
-               |               |
-               v               v
-          +----+---------------+----+
-          |    AEAD.Encrypt         |
-          +------------+------------+
-                       |
-                       v
-          +------------+------------+
-          |       Ciphertext        |
-          |    (new MoQT Object     |
-          |       Payload)          |
-          +-------------------------+
+                 +-----+-----+
+                 |Ciphertext |
+                 |(MoQT Obj  |
+                 | Payload)  |
+                 +-----------+
 ~~~
 {: #fig-encryption-process title="Object Encryption Process" }
 
@@ -398,54 +404,65 @@ The plaintext is then deserialized to extract the application's
 If parsing fails at any stage, the receiver MUST drop the MoQT Object.
 
 
+The detailed decryption process is shown below:
+
 ~~~ aasvg
-          +-------------------------+
-          |       Ciphertext        |
-          |      (MoQT Object       |
-          |       Payload)          |
-          +------------+------------+
-                       |
-                       v
-+----------------+     |     +----------------------+
-| track_base_key +---->+<----+ Group ID, Object ID, |
-| (per Key ID)   |     |     | Immutable Extensions |
-+----------------+     |     +----------------------+
-        |              |              |
-        v              |              v
-+-------+--------+     |     +--------+-------+
-| Key Derivation |     |     | Nonce Formation|
-| (HKDF)         |     |     | CTR = GID||OID |
-+-------+--------+     |     +--------+-------+
-        |              |              |
-        v              v              v
-   +----+----+    +----+----+    +----+----+
-   | moq_key |    |   AAD   |    |  nonce  |
-   +---------+    +---------+    +---------+
-        |              |              |
-        +------+-------+-------+------+
-               |               |
-               v               v
-          +----+---------------+----+
-          |    AEAD.Decrypt         |
-          +------------+------------+
-                       |
-                       v
-              +--------+----------+
-              |   Plaintext (pt)  |
-              +--------+----------+
-                       |
-                       v
-                 +-----+-----+
-                 |Deserialize|
+                 +-----------+
+                 |Ciphertext |
+                 |(MoQT Obj  |
+                 | Payload)  |
                  +-----+-----+
                        |
-         +-------------+-------------+
-         |                           |
-         v                           v
-+--------+----------+     +----------+--------+
-| original_payload  |     | Private Header    |
-| (application data)|     | Extensions        |
-+-------------------+     +-------------------+
+                       +----------------------------------------------+
+                                                                      |
++----------------+           +-------------------------------+        |
+| track_base_key |           | Key ID, Group ID, Object ID,  |        |
+| (per Key ID)   |           | Track Namespace, Track Name,  |        |
++-------+--------+           | Serialized Immutable Ext.     |        |
+        |                    +-------+-----------------------+        |
+        v                            |                                |
++-------+--------+                   +------------+-----------+       |
+| Key Derivation |                   |                        |       |
+| (HKDF)         |                   v                        v       |
++---+--------+---+              +------------------------+  +-----+   |
+    |         |                 | CTR = GID(64)||OID(32) |  | AAD |   |
+    |         |                 +----+-------------------+  +-----+   |
+    |         |                      |                        |       |
+    |         |                      |                        |       |
+    |         |                      |                        |       |
+    |         |                      |                        |       |
+    |         |                      |                        |       |
+    |         |                      |                        |       |
+    |         |                      |                        |       |
+    |         |                      |                        |       |
+    |         |                      v                        |       |
+    |         |  salt      +----+-----------+                 |       |
+    |         +----------> | Nonce Formation|                 |       |
+    |                      +----+-----------+                 |       |
+    |                                |                        |       |
+    |                                |                        |       |
+    |                                |                        |       |
+    |                                |                        |       |
+    |                                |                        |       |
+    |                                |                        |       |
+    | key                            | nonce                  | aad   | ct
+    |                                v                        |       |
+    |    +-------------+--------------+                       |       |
+    |    |                            |                       |       |
+    +--->+        AEAD.Decrypt        +<----------------------+       |
+         |                            |<------------------------------+
+         +-------------+--------------+
+                       |
+                       | pt
+                       |
+                       v
+            +----------+----------------+
+            |                           |
+            v                           v
+      +-------------------+     +-----------------+
+      | original_payload  |     | Private Header  |
+      | (application data)|     | Extensions      |
+      +-------------------+     +-----------------+
 ~~~
 {: #fig-decryption-process title="Object Decryption Process" }
 
