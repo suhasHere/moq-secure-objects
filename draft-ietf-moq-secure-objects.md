@@ -517,7 +517,7 @@ def derive_key_salt(key_id,track_base_key,
 
 In the derivation of `moq_secret`:
 
-* The `+` operator represents concatenation of byte strings.
+* The `+` operator represents concatenation of byte sequences.
 
 * The Key ID value is encoded as an 8-byte big-endian integer.
 
