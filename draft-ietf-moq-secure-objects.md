@@ -115,35 +115,7 @@ HBH:
 : Hop By Hop
 
 varint:
-: {{MoQ-TRANSPORT}} variable length integer. TODO - align with -17 MoQT draft
-
-## Notational Conventions
-
-### Serialized Full Track Name {#ftn}
-
-Serialized Full Track Name is composed of MoQT Track Namespace and
-Track Name as shown below:
-
-~~~
-Serialized Full Track Name = Serialize(Track Namespace)
-                             + Serialize(Track Name)
-~~~
-
-The `Serialize` operation follows the same on-the-wire
-encoding for Track Name Space and Track Name as defined in Section 2.4.1 of
-{{MoQ-TRANSPORT}}.
-
-This mandates that the serialization of Track Namespace tuples
-starts with varint encoded count of tuples. This is followed by encoding
-corresponding to each tuple. Each tuple's encoding starts with
-varint encoded length for the count of bytes and  bytes
-representing the content of the tuple.
-
-The Track Name is varint encoded length followed by sequence of bytes that
-identifies an individual track within the namespace.
-
-
-The `+` represents concatenation of byte sequences.
+: {{MoQ-TRANSPORT}} variable length integer (Section 1.4.1).
 
 
 # MoQT Object Model Recap {#MoQT}
@@ -223,57 +195,28 @@ qualified domain names or UUIDs as part of the Track Namespace.
 
 Section 10.2.1 {{MoQ-TRANSPORT}} defines fields of a canonical
 MoQT Object. The protection scheme defined in this draft encrypts the
-`Object Payload` and Private header extensions {{pvt-ext}}.
+`Object Payload` and Encrypted Properties List {{pvt-ext}}.
 The scheme authenticates the  `Group ID`, `Object ID`,
-`Immutable Header Extensions` (Section 11.2 of {{MoQ-TRANSPORT}} }}
+`Immutable Properties` (Section 11.6 of {{MoQ-TRANSPORT}})
 and `Object Payload` fields, regardless of the on-the-wire encoding of the
 objects over QUIC Datagrams or QUIC streams.
 
-~~~ aasvg
+| Protection Level | Fields |
+|:-----------------|:-------|
+| Unprotected and Unauthenticated (HBH only) | Track Alias, Priority, Mutable Properties |
+| End-to-End Authenticated | Group ID, Object ID, Immutable Properties, Track Namespace, Track Name (including Key ID) |
+| End-to-End Encrypted and Authenticated | Original Payload, Encrypted Properties List |
+{: #tbl-protection-levels title="MoQ Object Security Protection Levels" }
 
-+==================================================================+
-|                    MoQT Secure Object.                           |
-+==================================================================+
-|                                                                  |
-|  +------------------------------------------------------------+  |
-|  |      Track Alias, Priority, Mutable Extensions,..          |  |
-|  |                                                            |  |
-|  |              [ PLAINTEXT / HBH Protected ]                 |  |
-|  +------------------------------------------------------------+  |
-|                                                                  |
-|  +------------------------------------------------------------+  |
-|  |  Group ID, Object ID, Immutable Header Extensions          |  |
-|  |  Track Namespace, Track Name  (including Key ID)           |  |
-|  |                                                            |  |
-|  |     [ PLAINTEXT / HBH Protected + E2E Authenticated ]      |  |
-|  +------------------------------------------------------------+  |
-|                                                                  |
-|  +------------------------------------------------------------+  |
-|  |  Original Payload + Private Header Extensions              |  |
-|  |                                                            |  |
-|  |        [ E2E Encrypted + E2E Authenticated ]               |  |
-|  +------------------------------------------------------------+  |
-|                                                                  |
-+==================================================================+
+## Properties
 
-Legend:
-  PLAINTEXT / HBH Protected: Visible to relays, protected by TLS
-  E2E Authenticated: Integrity protected from original publisher
-                     to end subscriber
-  E2E Encrypted: Confidentiality protected from original publisher
-                 to end subscriber
-~~~
-{: #fig-secure-object title="MoQ Object Structure and Security Protection" }
-
-## Extensions
-
-MoQT defines two types of Object Header Extensions, mutable and
-immutable. This specification uses MoQT immutable extensions to convey
-end-to-end authenticated metadata and adds Private Object header extensions
-(see {{pvt-ext}}). Private extensions are serialized and encrypted along with
-the Object payload, decrypted and deserialized by the receiver. This specification
-further defines `Secure Object KID` extension (see {{keyid-ext}}),
-which is transmitted within the immutable extensions.
+MoQT defines mutable and immutable properties for objects. This
+specification uses MoQT immutable properties to convey end-to-end
+authenticated metadata and adds encrypted object properties
+(see {{pvt-ext}}). The Encrypted Properties List is serialized and encrypted
+along with the Object payload, decrypted and deserialized by the receiver.
+This specification further defines the `Secure Object KID` property
+(see {{keyid-ext}}), which is transmitted within the immutable properties.
 
 ## Setup Assumptions
 
@@ -283,7 +226,7 @@ and end subscribers for a given track. How these per-track secrets and
 their lifetimes are established is outside the scope of this specification.
 The application also defines which Key ID should be used for a given encryption
 operation. For decryption, the Key ID is obtained from the `Secure Object KID`
-header extension (that is contained with in the immutable header extension of the
+property (that is contained within the immutable properties of the
 Object).
 
 Applications determine the ciphersuite to be used for each
@@ -295,21 +238,47 @@ of ciphersuites that can be used.
 This section provides steps for applications over MoQT to
 use mechanisms defined in this specification.
 
+### Serialized Full Track Name {#ftn}
+
+Serialized Full Track Name is composed of MoQT Track Namespace and
+Track Name as shown below:
+
+~~~
+Serialized Full Track Name = Serialize(Track Namespace)
+                             + Serialize(Track Name)
+~~~
+
+The `Serialize` operation follows the same on-the-wire
+encoding for Track Name Space and Track Name as defined in Section 2.4.1 of
+{{MoQ-TRANSPORT}}.
+
+This mandates that the serialization of Track Namespace tuples
+starts with varint encoded count of tuples. This is followed by encoding
+corresponding to each tuple. Each tuple's encoding starts with
+varint encoded length for the count of bytes and  bytes
+representing the content of the tuple.
+
+The Track Name is varint encoded length followed by sequence of bytes that
+identifies an individual track within the namespace.
+
+
+The `+` represents concatenation of byte sequences.
+
 ### Object Encryption
 
 To encrypt a MoQT Object, the application constructs a plaintext
-from the application data and any private header extensions:
+from the application data and any encrypted properties:
 
 ~~~
 pt = Serialize(original_payload)
-     + Serialize(Private header extensions)
+     + Serialize(Encrypted Properties List)
 ~~~
 
 Where `original_payload` is the application's object data. The
 serialization of `original_payload` consists of a varint-encoded
 byte count followed by the payload bytes. The serialization for
-private header extensions follows the rules for immutable extensions
-(as defined in section 11 of {{MoQ-TRANSPORT}}).
+the Encrypted Properties List follows the rules for immutable properties
+(as defined in Section 11 of {{MoQ-TRANSPORT}}).
 
 The plaintext is then encrypted:
 
@@ -319,13 +288,13 @@ ciphertext = encrypt(pt)
 
 The resulting ciphertext replaces the `original_payload` as the
 MoQT Object Payload. The ciphertext length reflects the encrypted
-`original_payload` plus any private header extensions plus the
+`original_payload` plus any Encrypted Properties List plus the
 AEAD authentication tag.
 
 ~~~ aasvg
 +-------------------+     +-------------------------+
-| original_payload  |     | Private Header          |
-| (application data)|     | Extensions              |
+| original_payload  |     | Encrypted Properties    |
+| (application data)|     | List                    |
 +--------+----------+     +------------+------------+
          |                             |
          v                             v
@@ -344,7 +313,7 @@ AEAD authentication tag.
 +----------------+     |     +-------------------------------+
 | track_base_key |     |     | Key ID, Group ID, Object ID,  |
 | (per Key ID)   |     |     | Track Namespace, Track Name,  |
-+-------+--------+     |     | Serialized Immutable Ext.     |
++-------+--------+     |     | Serialized Immutable Props.   |
         |              |     +---------------+---------------+
         v              |                     |
 +-------+--------+     |        +------------+------------+
@@ -395,17 +364,17 @@ pt = decrypt(ciphertext)
 ~~~
 
 The plaintext is then deserialized to extract the application's
-`original_payload` and any private header extensions:
+`original_payload` and the Encrypted Properties List:
 
 1. Read a varint to obtain the `original_payload` length.
 
 2. Read that many bytes as `original_payload`.
 
-3. If no bytes remain, there are no private header extensions.
+3. If no bytes remain, there is no Encrypted Properties List.
 
-4. Otherwise, read the extension type (16 bits). If the value
+4. Otherwise, read the property type (16 bits). If the value
    is not 0xA, drop the object. Parse the remaining bytes as
-   the Private header extension structure.
+   the Encrypted Properties List structure.
 
 If parsing fails at any stage, the receiver MUST drop the MoQT Object.
 
@@ -421,7 +390,7 @@ If parsing fails at any stage, the receiver MUST drop the MoQT Object.
 +----------------+    |     +-------------------------------+
 | track_base_key |    |     | Key ID, Group ID, Object ID,  |
 | (per Key ID)   |    |     | Track Namespace, Track Name,  |
-+-------+--------+    |     | Serialized Immutable Ext.     |
++-------+--------+    |     | Serialized Immutable Props.   |
         |             |     +---------------+---------------+
         v             |                     |
 +-------+--------+    |        +------------+------------+
@@ -467,8 +436,8 @@ If parsing fails at any stage, the receiver MUST drop the MoQT Object.
         |                           |
         v                           v
 +-------+-----------+     +---------+-------+
-| original_payload  |     | Private Header  |
-| (application data)|     | Extensions      |
+| original_payload  |     | Encrypted       |
+| (application data)|     | Properties List |
 +-------------------+     +-----------------+
 ~~~
 {: #fig-decryption-process title="Object Decryption Process" }
@@ -499,7 +468,7 @@ will refer to the following aspects of the AEAD and the hash algorithm below:
 
 ## Metadata Authentication {#aad}
 
-The Key ID, Full Track Name, Immutable Header Extensions, Group ID, and Object ID
+The Key ID, Full Track Name, Immutable Properties, Group ID, and Object ID
 for a given MoQT Object are authenticated as part of secure object encryption.
 This ensures, for example, that encrypted objects cannot be replayed across tracks.
 
@@ -514,14 +483,14 @@ SECURE_OBJECT_AAD {
     Track Namespace (..),
     Track Name Length (i),
     Track Name (..),
-    Serialized Immutable Extensions (..)
+    Serialized Immutable Properties (..)
 }
 ~~~
 
 * Track Namespace is serialized as in section 2.4.1 of MoQT.
 
-Serialized Immutable Extensions MUST include the `Secure Object KID header
-extension` containing the Key ID.
+Serialized Immutable Properties MUST include the `Secure Object KID`
+property containing the Key ID.
 
 ## Nonce Formation {#nonce}
 
@@ -576,16 +545,16 @@ from the `track_base_key` {{keys}}.  The nonce is
 formed by first XORing the `moq_salt` with the current CTR value {{nonce}}, and
 then encoding the result as a big-endian integer of length `AEAD.Nn`.
 
-The Private extensions and Object payload field from the MoQT object is used
-by the AEAD algorithm for the plaintext.
+The Encrypted Properties List and Object payload field from the MoQT object
+are used by the AEAD algorithm for the plaintext.
 
 The encryptor forms an SecObj header using the Key ID value provided.
 
 The encryption procedure is as follows:
 
 1. Obtain the plaintext payload to encrypt from the MoQT object. Extract
-   the Group ID, Object ID, and the Serialized Immutable Header Extension from
-   the MoQT object headers. Ensure the Secure Object KID header extension is
+   the Group ID, Object ID, and the Serialized Immutable Properties from
+   the MoQT object headers. Ensure the Secure Object KID property is
    included, with the Key ID set as its value.
 
 2. Retrieve the `moq_key` and `moq_salt` matching the Key ID.
@@ -595,15 +564,15 @@ The encryption procedure is as follows:
 4. Form the nonce by as described in {{nonce}}.
 
 5. Apply the AEAD encryption function with moq_key, nonce, aad,
-   MoQT Object payload and serialized private header exntenions as inputs (see {{app}}).
+   MoQT Object payload and serialized Encrypted Properties List as inputs (see {{app}}).
 
 The final SecureObject is formed from the MoQT transport headers,
 followed by the output of the encryption.
 
 ## Decryption
 
-For decrypting, the Key ID from the `Secure Object KID` header extension
-contained within immutable header extension is
+For decrypting, the Key ID from the `Secure Object KID` property
+contained within the immutable properties is
 used to find the right key and salt for the encrypted object. The MoQT
 track information matching the Key ID along with  `Group ID` and `Object ID`
 fields of the MoQT object header are used to form the nonce.
@@ -623,11 +592,11 @@ The decryption procedure is as follows:
 5. Apply the AEAD decryption function with moq_key, nonce, aad and
    ciphertext as inputs.
 
-6. Decode the private extension headers, returning both the headers and
+6. Decode the Encrypted Properties List, returning both the properties and
    the object payload.
 
-If extracting Key ID fails either due to missing `Secure Object KID` extension
-within immutable haeader extension or error from parsing, the client MUST
+If extracting Key ID fails either due to missing `Secure Object KID` property
+within immutable properties or error from parsing, the client MUST
 discard the received MoQT Object.
 
 If a ciphertext fails to decrypt because there is no key available for the Key ID
@@ -640,27 +609,28 @@ operation should take the same amount of time regardless of whether decryption
 succeeds or fails.
 
 
-# Header Extensions
+# Object Properties
 
-## Key ID Extension {#keyid-ext}
+## Key ID Property {#keyid-ext}
 
-Key ID  (Extension Header Type 0x2) is a variable length integer and
+Key ID (Property Type 0x2) is a variable length integer and
 identifies the keying material (keys, nonces and associated context
 for the MoQT Track) to be used for a given MoQT track.
 
-The Key ID extension is included within the Immutable Header extension.
-All objects encoded MUST include the Key ID header extension when
+The Key ID property is included within the Immutable Properties.
+All objects encoded MUST include the Key ID property when
 using this specification for object encryption.
 
-## Private Extension {#pvt-ext}
+## Encrypted Properties List {#pvt-ext}
 
-The Private Extensions (Extension Header Type 0xA) contains a sequence of
-Key-Value-Pairs (see section 1.4.2 {{MoQ-TRANSPORT}}) which are also
-Object Extension Headers of the Object. This extension can be added by the
-Original Publisher and considered part of the Object Payload.
+The Encrypted Properties List (Property Type 0xA) is a container that holds
+a sequence of Key-Value-Pairs (see Section 1.4.3 of {{MoQ-TRANSPORT}})
+representing one or more Object Properties. These properties can be added
+by the Original Publisher and are encrypted along with the Object Payload,
+making them accessible only to End Subscribers.
 
 ~~~
-Private Extensions {
+Encrypted Properties List {
   Type (0xA),
   Length (i),
   Key-Value-Pair (..) ...
@@ -777,14 +747,14 @@ straightforwardly detect gaps. A subscriber receiving Group ID N followed by
 Group ID N+2, or Object ID M followed by Object ID M+3, can conclude that
 intervening content was not delivered.
 
-### Non-Sequential Identifiers with Gap Extensions
+### Non-Sequential Identifiers with Gap Properties
 
 Applications that use Group IDs or Object IDs with intentional gaps (e.g., for
-sparse data or timestamp-based identifiers) MUST include the Group ID Gap
-and/or Object ID Gap extensions as immutable header extensions. These extensions
-indicate the expected distance to the next identifier. If the Object ID Gap
-extension is absent from a secure object, receivers MUST assume a gap value
-of 1. Similarly, if the Group ID Gap extension is absent, receivers MUST assume
+sparse data or timestamp-based identifiers) MUST include the Prior Group ID Gap
+and/or Prior Object ID Gap properties as immutable properties. These properties
+indicate the expected distance to the next identifier. If the Prior Object ID Gap
+property is absent from a secure object, receivers MUST assume a gap value
+of 1. Similarly, if the Prior Group ID Gap property is absent, receivers MUST assume
 a gap value of 1.
 
 ## Signaling End of Content
@@ -796,22 +766,35 @@ object in a sequence, subscribers can distinguish between "more objects may
 arrive" and "all objects have been sent," enabling detection of trailing
 deletions that would otherwise be undetectable.
 
+Publishers SHOULD send an End of Group status (0x3) as the final object in
+each group. This allows subscribers to determine whether all objects up to
+that Object ID have been received, enabling detection of any missing objects
+at the end of the group.
+
+Publishers SHOULD send an End of Track status (0x4) when the track is complete
+(e.g., end of a recorded stream or live session). This allows subscribers to
+determine whether all objects up to that location have been received, enabling
+detection of any missing objects at the end of the track.
+
+For subgroup boundaries, the transport stream closure (FIN) signals that all
+objects in the subgroup have been delivered.
+
 # IANA Considerations {#iana}
 
-## MOQ Extension Headers Registry
+## MOQ Object Properties Registry
 
-This document defines new MoQT Object extension headers under the
-`MOQ Extension Headers` registry.
+This document defines new MoQT Object properties under the
+`MOQ Object Properties` registry.
 
 | Type |                         Value                        |
 | ---- | ---------------------------------------------------- |
 | 0x2  | Secure Object KID - see {{keyid-ext}}                |
-| 0xA  | Private Extensions - see {{pvt-ext}}                 |
+| 0xA  | Encrypted Properties List - see {{pvt-ext}}          |
 
-Note: The Private Extensions type (0xA) appears only within the encrypted
-payload structure defined in {{app}}, not as a regular MoQT Object Header
-Extension. It is registered here to reserve the type value and prevent
-conflicts with the extension type field used in the encrypted payload format.
+Note: The Encrypted Properties List type (0xA) appears only within the encrypted
+payload structure defined in {{app}}, not as a regular MoQT Object
+Property. It is registered here to reserve the type value and prevent
+conflicts with the property type field used in the encrypted payload format.
 
 ## Cipher Suites {#ciphersuite}
 
@@ -869,6 +852,6 @@ Implementations SHOULD support `AES_128_CTR_HMAC_SHA256_80` (0x0001).
 
 # Acknowledgements
 
-Thanks to Alan Frindell for providing text on adding private
-extensions.
-hank you to Magnus Westerlund for doing a thorough security review.
+Thanks to Alan Frindell for providing text on adding encrypted
+properties.
+Thank you to Magnus Westerlund for doing a thorough security review.
