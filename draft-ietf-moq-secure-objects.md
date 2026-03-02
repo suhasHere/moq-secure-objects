@@ -175,7 +175,7 @@ solely responsible for the content of the object payload.
 
 Tracks are identified by a combination of its Track Namespace and
 Track Name.  Tuples of the Track Namespace and Track Name are treated
-as a sequence of binary bytes.  Group and Objects are represented as
+as a sequence of binary bytes.  Groups and Objects are represented as
 variable length integers called GroupID and ObjectID respectively.
 
 Two important properties of objects are:
@@ -215,7 +215,7 @@ specification uses MoQT immutable properties to convey end-to-end
 authenticated metadata and adds encrypted object properties
 (see {{pvt-ext}}). The Encrypted Properties List is serialized and encrypted
 along with the Object payload, decrypted and deserialized by the receiver.
-This specification further defines the `Secure Object KID` property
+This specification further defines the `Secure Object Key ID` property
 (see {{keyid-ext}}), which is transmitted within the immutable properties.
 
 ## Setup Assumptions
@@ -225,7 +225,7 @@ tuples, where each `track_base_key` is known only to authorized original publish
 and end subscribers for a given track. How these per-track secrets and
 their lifetimes are established is outside the scope of this specification.
 The application also defines which Key ID should be used for a given encryption
-operation. For decryption, the Key ID is obtained from the `Secure Object KID`
+operation. For decryption, the Key ID is obtained from the `Secure Object Key ID`
 property (that is contained within the immutable properties of the
 Object).
 
@@ -301,12 +301,12 @@ The detailed encryption process is shown below:
           |                        |
           v                        v
           +------------+----------------------------------------------+
-                                                                      | 
+                                                                      |
 +----------------+           +-------------------------------+        |
-| track_base_key |           | Key ID, Group ID, Object ID,  |        |     
+| track_base_key |           | Key ID, Group ID, Object ID,  |        |
 | (per Key ID)   |           | Track Namespace, Track Name,  |        |
 +-------+--------+           | Serialized Immutable Ext.     |        |
-        |                    +-------+-----------------------+        |    
+        |                    +-------+-----------------------+        |
         v                            |                                |
 +-------+--------+                   +------------+-----------+       |
 | Key Derivation |                   |                        |       |
@@ -316,15 +316,15 @@ The detailed encryption process is shown below:
     |         |                 +----+-------------------+  +-----+   |
     |         |                      |                        |       |
     |         |                      |                        |       |
-    |         |                      |                        |       |  
     |         |                      |                        |       |
-    |         |                      |                        |       |       
+    |         |                      |                        |       |
+    |         |                      |                        |       |
     |         |                      |                        |       |
     |         |                      |                        |       |
     |         |                      |                        |       |
     |         |                      v                        |       |
     |         |  salt      +----+-----------+                 |       |
-    |         +----------> | Nonce Formation|                 |       |       
+    |         +----------> | Nonce Formation|                 |       |
     |                      +----+-----------+                 |       |
     |                                |                        |       |
     |                                |                        |       |
@@ -481,9 +481,12 @@ SECURE_OBJECT_AAD {
 }
 ~~~
 
+Open Issue: We need to sort out of we can remove most the things from
+SECURE_OBJECT_AAD because they are already bound to the keys.
+
 * Track Namespace is serialized as in section 2.4.1 of MoQT.
 
-Serialized Immutable Properties MUST include the `Secure Object KID`
+Serialized Immutable Properties MUST include the `Secure Object Key ID`
 property containing the Key ID.
 
 ## Nonce Formation {#nonce}
@@ -496,7 +499,7 @@ if applied to an object where group ID is larger than 2<sup>64</sup> or
 the object ID is larger than 2<sup>32</sup> and the MoQT Object MUST NOT
 be processed further.
 
-## Key Derivation {#keys}
+## Key and Salt Derivation {#keys}
 
 Encryption and decryption use a key and salt derived from the `track_base_key`
 associated with a Key ID. Given a `track_base_key` value, the key and salt are
@@ -548,7 +551,7 @@ The encryption procedure is as follows:
 
 1. Obtain the plaintext payload to encrypt from the MoQT object. Extract
    the Group ID, Object ID, and the Serialized Immutable Properties from
-   the MoQT object headers. Ensure the Secure Object KID property is
+   the MoQT object headers. Ensure the Secure Object Key ID property is
    included, with the Key ID set as its value.
 
 2. Retrieve the `moq_key` and `moq_salt` matching the Key ID.
@@ -565,7 +568,7 @@ followed by the output of the encryption.
 
 ## Decryption
 
-For decrypting, the Key ID from the `Secure Object KID` property
+For decrypting, the Key ID from the `Secure Object Key ID` property
 contained within the immutable properties is
 used to find the right key and salt for the encrypted object. The MoQT
 track information matching the Key ID along with  `Group ID` and `Object ID`
@@ -589,7 +592,7 @@ The decryption procedure is as follows:
 6. Decode the Encrypted Properties List, returning both the properties and
    the object payload.
 
-If extracting Key ID fails either due to missing `Secure Object KID` property
+If extracting Key ID fails either due to missing `Secure Object Key ID` property
 within immutable properties or error from parsing, the client MUST
 discard the received MoQT Object.
 
@@ -782,7 +785,7 @@ This document defines new MoQT Object properties under the
 
 | Type |                         Value                        |
 | ---- | ---------------------------------------------------- |
-| 0x2  | Secure Object KID - see {{keyid-ext}}                |
+| 0x2  | Secure Object Key ID - see {{keyid-ext}}             |
 | 0xA  | Encrypted Properties List - see {{pvt-ext}}          |
 
 Note: The Encrypted Properties List type (0xA) appears only within the encrypted
