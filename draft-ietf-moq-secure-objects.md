@@ -322,36 +322,9 @@ MoQT Object Payload. The ciphertext length reflects the encrypted
 `original_payload` plus any private header extensions plus the
 AEAD authentication tag.
 
-~~~ aasvg
-+-------------------+   +-------------------+
-| original_payload  |   | Private Hdr Ext   |
-+--------+----------+   +--------+----------+
-         |                       |
-         +----------+------------+
-                    |
-                    v
-+---------------+   |   +--------------------------------+
-| track_base_key|-->+<--| Key ID, GID, OID, Track Name,  |
-| (per Key ID)  |   |   | Immutable Extensions           |
-+---------------+   |   +---------------+----------------+
-                    |                   |
-                    v                   v
-            +-------+-------+   +-------+-------+
-            | AEAD.Encrypt  |   | (used for     |
-            | (key, nonce,  |<--|  AAD + nonce) |
-            |  aad, pt)     |   +---------------+
-            +-------+-------+
-                    |
-                    v
-            +-------+-------+
-            |  Ciphertext   |
-            +---------------+
-~~~
-{: #fig-encryption-simple title="Object Encryption (Simplified)" }
-
 The detailed encryption process is shown below:
 
-~~~ aasvg
+~~~
 +-------------------+     +-----------------+
 | original_payload  |     | Private Header  |
 | (application data)|     | Extensions      |
@@ -374,43 +347,46 @@ The detailed encryption process is shown below:
 | track_base_key |     |      | Key ID, Group ID, Object ID,  |
 | (per Key ID)   |     |      | Track Namespace, Track Name,  |
 +-------+--------+     |      | Serialized Immutable Ext.     |
-        |              |      +---------------+---------------+
-        v              |                      |
-+-------+--------+     |         +------------+------------+
-| Key Derivation |     |         |                         |
-| (HKDF)         |     |         v                         v
-+---+--------+---+     |    +----+----+       +------------------------+
-    |        |         |    |   AAD   |       | CTR = GID(64)||OID(32) |
-    v        v         |    +----+----+       +-----------+------------+
-+-------+ +--------+   |         |                        |
-|moq_key| |moq_salt|   |         |                        |
-+---+---+ +---+----+   |         |                        |
-    |         |        |         |                        |
-    |         +--------+-------------------+              |
-    |                  |                   |              |
-    |             +----+----+        +-----+-----+        |
-    |             |   XOR   |<-------+    CTR    |<-------+
-    |             +----+----+        +-----------+
-    |                  |
-    |                  v
-    |             +----+----+
-    |             |  nonce  |
-    |             +----+----+
-    |                  |
-    +---------+--------+
-              |        |
-              v        v
-         +----+--------+----+
-         |   AEAD.Encrypt   |
-         |(key,nonce,aad,pt)|
-         +---------+--------+
-                   |
-                   v
-             +-----+-----+
-             |Ciphertext |
-             |(MoQT Obj  |
-             | Payload)  |
-             +-----------+
+        |              |      +-------+-----------------------+
+        v              |              |
++-------+--------+     |              +------------+------------+
+| Key Derivation |     |              |                        |
+| (HKDF)         |     |              v                        v
++---+--------+---+     |         +----+----+       +------------------------+
+    |        |         |         |   AAD   |       | CTR = GID(64)||OID(32) |
+    v        v         |         +----+----+       +-----------+------------+
++-------+ +--------+   |              |                        |
+|moq_key| |moq_salt|   |              |                        v
++---+---+ +---+----+   |              |                  +-----+-----+
+    |         |        |              |                  |    CTR    |
+    |         |        |              |                  +-----+-----+
+    |         |        |              |                        |
+    |         |        |              |         +--------------+
+    |         |        |              |         |
+    |         |        |              |         v
+    |         |        |              |    +----+----+
+    |         +--------|--------------|-->|   XOR   |
+    |                  |              |    +----+----+
+    |                  |              |         |
+    |                  |              |         v
+    |                  |              |    +----+----+
+    |                  |              |    |  nonce  |
+    |                  |              |    +----+----+
+    |                  |              |         |
+    | key              | pt           | aad     | nonce
+    |                  |              |         |
+    |    +-------------+--------------|----+    |
+    |    |                            |    |    |
+    +--->+        AEAD.Encrypt        +<---+----+
+         |                            |
+         +-------------+--------------+
+                       |
+                       v
+                 +-----+-----+
+                 |Ciphertext |
+                 |(MoQT Obj  |
+                 | Payload)  |
+                 +-----------+
 ~~~
 {: #fig-encryption-process title="Object Encryption Process" }
 
@@ -438,95 +414,72 @@ The plaintext is then deserialized to extract the application's
 
 If parsing fails at any stage, the receiver MUST drop the MoQT Object.
 
-~~~ aasvg
-            +---------------+
-            |  Ciphertext   |
-            +-------+-------+
-                    |
-                    v
-+---------------+   |   +--------------------------------+
-| track_base_key|-->+<--| Key ID, GID, OID, Track Name,  |
-| (per Key ID)  |   |   | Immutable Extensions           |
-+---------------+   |   +---------------+----------------+
-                    |                   |
-                    v                   v
-            +-------+-------+   +-------+-------+
-            | AEAD.Decrypt  |   | (used for     |
-            | (key, nonce,  |<--|  AAD + nonce) |
-            |  aad, ct)     |   +---------------+
-            +-------+-------+
-                    |
-         +----------+------------+
-         |                       |
-         v                       v
-+--------+----------+   +--------+----------+
-| original_payload  |   | Private Hdr Ext   |
-+-------------------+   +-------------------+
-~~~
-{: #fig-decryption-simple title="Object Decryption (Simplified)" }
 
 The detailed decryption process is shown below:
 
-~~~ aasvg
-             +-----------+
-             |Ciphertext |
-             |(MoQT Obj  |
-             | Payload)  |
-             +-----+-----+
-                   |
-                   |
-+----------------+ | +-------------------------------+
-| track_base_key | | | Key ID, Group ID, Object ID,  |
-| (per Key ID)   | | | Track Namespace, Track Name,  |
-+-------+--------+ | | Serialized Immutable Ext.     |
-        |          | +---------------+---------------+
-        v          |                 |
-+-------+--------+ |    +------------+------------+
-| Key Derivation | |    |                         |
-| (HKDF)         | |    v                         v
-+---+--------+---+ | +----+----+       +------------------------+
-    |        |     | |   AAD   |       | CTR = GID(64)||OID(32) |
-    v        v     | +----+----+       +-----------+------------+
-+-------+ +--------+ |     |                        |
-|moq_key| |moq_salt| |     |                        |
-+---+---+ +---+----+ |     |                        |
-    |         |      |     |                        |
-    |         +------+---------------+              |
-    |                |               |              |
-    |           +----+----+    +-----+-----+        |
-    |           |   XOR   |<---+    CTR    |<-------+
-    |           +----+----+    +-----------+
-    |                |
-    |                v
-    |           +----+----+
-    |           |  nonce  |
-    |           +----+----+
-    |                |
-    +--------+-------+
-             |       |
-             v       v
-        +----+-------+----+
-        |  AEAD.Decrypt   |
-        |(key,nonce,aad,ct)|
-        +--------+--------+
-                 |
-                 v
-        +--------+---------+
-        |   Plaintext (pt) |
-        +--------+---------+
-                 |
-                 v
-           +-----------+
-           |Deserialize|
-           +-----------+
-                 |
-           +-----+-----+
-           |           |
-           v           v
-+-------------------+     +-----------------+
-| original_payload  |     | Private Header  |
-| (application data)|     | Extensions      |
-+---------+---------+     +--------+--------+
+~~~
+                 +-----------+
+                 |Ciphertext |
+                 |(MoQT Obj  |
+                 | Payload)  |
+                 +-----+-----+
+                       |
+                       |
++----------------+     |      +-------------------------------+
+| track_base_key |     |      | Key ID, Group ID, Object ID,  |
+| (per Key ID)   |     |      | Track Namespace, Track Name,  |
++-------+--------+     |      | Serialized Immutable Ext.     |
+        |              |      +-------+-----------------------+
+        v              |              |
++-------+--------+     |              +------------+------------+
+| Key Derivation |     |              |                        |
+| (HKDF)         |     |              v                        v
++---+--------+---+     |         +----+----+       +------------------------+
+    |        |         |         |   AAD   |       | CTR = GID(64)||OID(32) |
+    v        v         |         +----+----+       +-----------+------------+
++-------+ +--------+   |              |                        |
+|moq_key| |moq_salt|   |              |                        v
++---+---+ +---+----+   |              |                  +-----+-----+
+    |         |        |              |                  |    CTR    |
+    |         |        |              |                  +-----+-----+
+    |         |        |              |                        |
+    |         |        |              |         +--------------+
+    |         |        |              |         |
+    |         |        |              |         v
+    |         |        |              |    +----+----+
+    |         +--------|--------------|-->|   XOR   |
+    |                  |              |    +----+----+
+    |                  |              |         |
+    |                  |              |         v
+    |                  |              |    +----+----+
+    |                  |              |    |  nonce  |
+    |                  |              |    +----+----+
+    |                  |              |         |
+    | key              | ct           | aad     | nonce
+    |                  |              |         |
+    |    +-------------+--------------|----+    |
+    |    |                            |    |    |
+    +--->+        AEAD.Decrypt        +<---+----+
+         |                            |
+         +-------------+--------------+
+                       |
+                       v
+              +--------+---------+
+              |   Plaintext (pt) |
+              +--------+---------+
+                       |
+                       v
+                 +-----------+
+                 |Deserialize|
+                 +-----------+
+                       |
+                 +-----+-----+
+                 |           |
+                 v           v
+      +-------------------+     +-----------------+
+      | original_payload  |     | Private Header  |
+      | (application data)|     | Extensions      |
+      +---------+---------+     +--------+--------+
 ~~~
 {: #fig-decryption-process title="Object Decryption Process" }
 
