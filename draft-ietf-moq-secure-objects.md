@@ -481,6 +481,9 @@ SECURE_OBJECT_AAD {
 }
 ~~~
 
+Open Issue: We need to sort out of we can remove most the things from
+SECURE_OBJECT_AAD because they are already bound to the keys.
+
 * Track Namespace is serialized as in section 2.4.1 of MoQT.
 
 Serialized Immutable Properties MUST include the `Secure Object Key ID`
