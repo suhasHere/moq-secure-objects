@@ -54,7 +54,7 @@ subscribers, to ensuring that MoQ relays are unable to decrypt object contents.
 Additionally, subscribers can verify the integrity and authenticity of
 received objects, confirming that the content has not been modified in
 transit.
-Additionally it allows MoQ parameters to protected so the publisher can
+Additionally it allows MoQ parameters to be protected so the publisher can
 select if they are readable and/or modifiable by relays.
 
 
