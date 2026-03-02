@@ -499,7 +499,7 @@ if applied to an object where group ID is larger than 2<sup>64</sup> or
 the object ID is larger than 2<sup>32</sup> and the MoQT Object MUST NOT
 be processed further.
 
-## Key Derivation {#keys}
+## Key and Salt Derivation {#keys}
 
 Encryption and decryption use a key and salt derived from the `track_base_key`
 associated with a Key ID. Given a `track_base_key` value, the key and salt are
